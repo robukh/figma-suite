@@ -1,0 +1,11 @@
+{
+  "name": "figma-suite",
+  "version": "1.0.0",
+  "description": "AI design agent for Figma — designs production-quality screens, builds component libraries, syncs design tokens, and audits for design system compliance.",
+  "author": {
+    "name": "robukh"
+  },
+  "license": "MPL-2.0",
+  "keywords": ["figma", "design-system", "components", "tokens", "design", "mcp"],
+  "skills": "./skills/"
+}

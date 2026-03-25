@@ -1,0 +1,19 @@
+{
+  "name": "figma-suite",
+  "owner": {
+    "name": "robukh"
+  },
+  "metadata": {
+    "description": "AI design agent for Figma — designs screens, builds component libraries, syncs tokens, and audits design systems."
+  },
+  "plugins": [
+    {
+      "name": "figma-suite",
+      "source": ".",
+      "description": "AI design agent for Figma with component composition, variable bindings, and design system workflows.",
+      "version": "1.0.0",
+      "keywords": ["figma", "design-system", "components", "tokens", "design"],
+      "license": "MPL-2.0"
+    }
+  ]
+}
