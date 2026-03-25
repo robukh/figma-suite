@@ -4,13 +4,13 @@
     "name": "robukh"
   },
   "metadata": {
-    "description": "AI design agent for Figma — designs screens, builds component libraries, syncs tokens, and audits design systems."
+    "description": "Claude Code skill set for Figma — token sync, component library generation, screen design, and design system audits."
   },
   "plugins": [
     {
       "name": "figma-suite",
       "source": ".",
-      "description": "AI design agent for Figma with component composition, variable bindings, and design system workflows.",
+      "description": "Claude Code skill set for Figma with component composition, variable bindings, and design system workflows.",
       "version": "1.0.0",
       "keywords": ["figma", "design-system", "components", "tokens", "design"],
       "license": "MPL-2.0"

@@ -2,9 +2,9 @@
 
 # figma-suite
 
-An AI design agent for Figma. Designs production-quality screens, builds component libraries, syncs design tokens, and audits for design system compliance — all through natural language.
+A Claude Code skill set for Figma. Syncs design tokens, builds component libraries, designs screens, and audits for design system compliance — all through natural language.
 
-Built as a Claude Code skill, it turns the Figma MCP server into a full design workflow: proper auto-layout, variable bindings on every property, component composition via instances, text styles, instance swap slots, and screenshot-validated output. No hardcoded values, no detached instances, no raw hex codes.
+Turns the official Figma MCP server into a full design workflow: proper auto-layout, variable bindings on every property, component composition via instances, text styles, instance swap slots, and screenshot-validated output. No hardcoded values, no detached instances, no raw hex codes.
 
 ## Requirements
 

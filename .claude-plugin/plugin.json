@@ -1,7 +1,7 @@
 {
   "name": "figma-suite",
   "version": "1.0.0",
-  "description": "AI design agent for Figma — designs production-quality screens, builds component libraries, syncs design tokens, and audits for design system compliance.",
+  "description": "Claude Code skill set for Figma — token sync, component library generation, screen design, and design system audits via the official Figma MCP server.",
   "author": {
     "name": "robukh"
   },
