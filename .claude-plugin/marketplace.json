@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "figma-suite",
-      "source": ".",
+      "source": "./",
       "description": "Claude Code skill set for Figma with component composition, variable bindings, and design system workflows.",
       "version": "1.0.0",
       "keywords": ["figma", "design-system", "components", "tokens", "design"],
