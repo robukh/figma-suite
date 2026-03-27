@@ -7,7 +7,9 @@
       "Glob",
       "Grep",
       "WebSearch",
-      "mcp__figma__*"
+      "mcp__figma__*",
+      "WebFetch(domain:skills.sh)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
