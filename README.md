@@ -72,11 +72,11 @@ During setup, you choose where to save the workspace:
 ## Updating
 
 ```bash
-# Update via Claude Code CLI
+# If installed via Claude Code CLI
 /plugin update figma-suite
 
-# Or update all installed plugins at once
-/plugin update --all
+# If installed via skills CLI
+npx skills update robukh/figma-suite
 ```
 
 ## Usage
