@@ -192,17 +192,55 @@ Tier 4: [discovered overlays]
 
 ---
 
-## Phase 1b: Scan Figma Libraries (Mode B, or Mode A if library URLs provided)
+## Phase 1b: Scan Figma Files (Mode B, or Mode A if library URLs provided)
 
-For each library in `config.libraries[]`:
+For each file in `config.libraries[]` and `config.designFiles[]`, use `mcp__figma__use_figma` with Plugin API to read **local** file content directly. Do NOT rely on `get_variable_defs` or `search_design_system` for local/unpublished content — they only return published library data and may fail.
 
-1. Call `mcp__figma__get_variable_defs` with the library's fileKey → inventory existing variables
-2. Call `mcp__figma__search_design_system` with the library's fileKey → inventory existing components
-3. Call `mcp__figma__get_metadata` with the library's fileKey → get file name and page structure
+### Step 1: Scan pages
+```javascript
+const pages = figma.root.children.map(p => ({ id: p.id, name: p.name }));
+return JSON.stringify(pages);
+```
 
-Merge results across all libraries into unified inventories:
-4. Generate `token-map.generated.md` from all library variables (deduplicate by name, flag conflicts)
-5. Generate `component-contracts.generated.md` from all library components (prefix with library name if ambiguous)
+### Step 2: Scan local variables
+```javascript
+const collections = await figma.variables.getLocalVariableCollectionsAsync();
+const result = [];
+for (const col of collections) {
+  const modes = col.modes.map(m => m.name);
+  const vars = [];
+  for (const varId of col.variableIds) {
+    const v = await figma.variables.getVariableByIdAsync(varId);
+    if (v) vars.push({ name: v.name, type: v.resolvedType });
+  }
+  result.push({ name: col.name, modes, variableCount: vars.length, variables: vars });
+}
+return JSON.stringify(result);
+```
+
+### Step 3: Scan local text styles and components
+```javascript
+const textStyles = await figma.getLocalTextStylesAsync();
+const ts = textStyles.map(s => ({ name: s.name, fontSize: s.fontSize, family: s.fontName?.family, style: s.fontName?.style }));
+
+const componentSets = figma.root.findAllWithCriteria({ types: ["COMPONENT_SET"] });
+const cs = componentSets.map(c => ({ name: c.name, page: c.parent?.parent?.name || c.parent?.name, id: c.id }));
+
+const standaloneComponents = figma.root.findAllWithCriteria({ types: ["COMPONENT"] })
+  .filter(c => !c.parent || c.parent.type !== "COMPONENT_SET");
+const sc = standaloneComponents.map(c => ({ name: c.name, page: c.parent?.parent?.name || c.parent?.name, id: c.id }));
+
+return JSON.stringify({ textStyles: ts, componentSets: cs, standaloneComponents: sc });
+```
+
+**Critical:** Always use `return JSON.stringify(...)` — never `console.log()`. Console output is discarded.
+
+**If results are large:** Split into separate `use_figma` calls (pages, then variables, then styles+components) rather than one massive query.
+
+### Step 4: Merge and generate
+Merge results across all files into unified inventories:
+- Generate `token-map.generated.md` from all variables (deduplicate by name, flag conflicts)
+- Generate `component-contracts.generated.md` from all components (prefix with file name if ambiguous)
 
 ---
 

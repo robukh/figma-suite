@@ -4,6 +4,24 @@ These rules encode correct Plugin API usage patterns. Violating them produces co
 
 ---
 
+## Return Values (Critical)
+
+**Always use `return` to send data back from `use_figma` — never `console.log()`.**
+
+`console.log()` output is silently discarded by the MCP server. Only the `return` value is sent back. This is the #1 cause of "Code executed with no return value" errors.
+
+```javascript
+// WRONG — returns nothing
+console.log(JSON.stringify(result));
+
+// CORRECT — returns data to Claude
+return JSON.stringify(result);
+```
+
+For large results, split into multiple targeted `use_figma` calls rather than returning everything at once.
+
+---
+
 ## Sizing: Hug Contents vs Fixed
 
 **Never call `resize(width, height)` on an axis that should hug.**

@@ -188,14 +188,33 @@ codeSyntax: { WEB: "var(--token-name)" }
 
 ## MCP Tool Quick Reference
 
-### Reading from Figma
+### Reading from Figma — local file content
+
+**Always use `mcp__figma__use_figma` with Plugin API to read local file content.** The read-only MCP tools (`get_variable_defs`, `search_design_system`) only return **published library** data and may fail on local/unpublished content. To reliably read what's actually in the file:
+
+| Task | Approach |
+|------|----------|
+| Local variables & collections | `use_figma` → `figma.variables.getLocalVariableCollectionsAsync()` + `getVariableByIdAsync()` |
+| Local text styles | `use_figma` → `figma.getLocalTextStylesAsync()` |
+| Local components | `use_figma` → `figma.root.findAllWithCriteria({ types: ["COMPONENT_SET"] })` |
+| Local standalone components | `use_figma` → `figma.root.findAllWithCriteria({ types: ["COMPONENT"] })` |
+| Page structure | `use_figma` → `figma.root.children.map(p => ({ id: p.id, name: p.name }))` |
+
+**Critical `use_figma` rules for reading:**
+- Always use `return JSON.stringify(result)` — **never** `console.log()`. Console output is discarded; only `return` values come back.
+- If the result is large, split into multiple targeted queries rather than one massive dump.
+
+### Reading from Figma — published libraries and metadata
+
+These tools work for published/external library data and file metadata:
+
 | Task | Tool |
 |------|------|
-| Get current variables | `mcp__figma__get_variable_defs` |
-| Get component details | `mcp__figma__get_design_context` with nodeId |
-| Search DS components | `mcp__figma__search_design_system` |
+| Search published DS components | `mcp__figma__search_design_system` |
+| Get component design context | `mcp__figma__get_design_context` with nodeId |
 | Take screenshot | `mcp__figma__get_screenshot` |
-| Get file structure | `mcp__figma__get_metadata` |
+| Get file structure (pages) | `mcp__figma__get_metadata` — **avoid on root node** (`0:1`) for large files, it will overflow. Use on specific page nodeIds or use `use_figma` instead. |
+| Get published variables | `mcp__figma__get_variable_defs` — **may fail** with "select a layer first" error. Fall back to `use_figma` Plugin API. |
 
 ### Writing to Figma
 | Task | Tool |
