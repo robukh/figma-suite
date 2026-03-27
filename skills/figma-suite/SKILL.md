@@ -88,6 +88,30 @@ Dispatch based on `$ARGUMENTS`:
 
 These rules apply across ALL workflows:
 
+### User prompting format
+
+Whenever presenting the user with a choice, always use a **numbered list** with a clear default marked. Let the user reply with just a number or type a custom answer. Never present walls of text without structure.
+
+```
+Pick a platform:
+1. mobile-ios (default) — 393×852, iOS status bar, tab bar
+2. mobile-android — 393×852, Android status bar, bottom nav
+3. web-desktop — 1440×900, top nav
+4. custom — define your own
+
+Reply with a number or describe your setup:
+```
+
+For yes/no questions, offer both options explicitly:
+```
+Apply all 9 changes? (yes / no / let me choose)
+```
+
+For text input, show what's expected:
+```
+Project name (kebab-case, e.g. "my-mobile-app"):
+```
+
 ### Dry-run first
 Every write operation must produce a **dry-run report** first. Never write to Figma or code without user approval.
 

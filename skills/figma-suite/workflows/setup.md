@@ -35,9 +35,21 @@ The user wants to design in Figma without a codebase — just Figma file URLs. S
 
 1. Check if the current directory is a project (has `package.json`, `Cargo.toml`, `pyproject.toml`, `.git`, or any code files)
 2. If yes → Mode A (scan codebase)
-3. If no → Mode B (scan Figma only)
-4. Ask for a **project name** (used for the workspace folder)
+3. If no → ask the user:
+   ```
+   I don't see a codebase in this directory. How would you like to proceed?
+   1. Navigate to a different project directory first
+   2. Standalone mode — design in Figma without a codebase
+
+   Reply with a number:
+   ```
+4. Ask for a **project name** (used for the workspace folder):
+   ```
+   Project name (kebab-case, e.g. "my-mobile-app"):
+   ```
 5. Ask for Figma file URLs — see "Figma File Collection" below
+
+All user prompts must follow the numbered-list format described in SKILL.md (Universal Safety Rules → User prompting format).
 
 ### Naming convention selection
 
