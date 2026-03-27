@@ -69,6 +69,16 @@ During setup, you choose where to save the workspace:
 - **Multiple design files** — supports multiple design files per project
 - **Design rules** — auto-generates project-specific design rules from your library, fully editable
 
+## Updating
+
+```bash
+# Update via Claude Code CLI
+/plugin update figma-suite
+
+# Or update all installed plugins at once
+/plugin update --all
+```
+
 ## Usage
 
 ```
