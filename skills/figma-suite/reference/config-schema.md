@@ -16,6 +16,7 @@ The workspace folder is named by the project name (kebab-cased), not by a Figma 
   "name": "",                              // Human-readable project name
   "mode": "standalone",                    // "standalone" | "codebase"
   "projectPath": "",                       // Absolute path to codebase root (codebase mode only)
+  "workspaceLocation": "project",          // "project" (.figma-suite/ in project root) | "global" (<HOME>/.claude/figma-suite/{name}/)
   "generatedAt": "",                       // ISO 8601 timestamp of last setup/re-setup run
 
   // === Figma files ===
@@ -183,13 +184,26 @@ If no design rules file exists (e.g., the user deleted it or skipped generation)
 
 ## Workspace Folder Structure
 
+The workspace can live in one of two locations, chosen during setup:
+
+**Project-level** (`workspaceLocation: "project"`):
 ```
-<HOME>/.claude/figma-suite/{project-name}/
+{project-root}/.figma-suite/
 ├── config.json                            # Project configuration (this schema)
 ├── design-rules.md                        # Project-specific design rules (user-editable)
 ├── token-map.generated.md                 # Library tokens → Figma variables
 ├── component-contracts.generated.md       # Library components → Figma component sets
-└── component-mapping.generated.md         # Code ↔ Figma component relationships (codebase mode)
+└── component-mapping.generated.md         # Code ↔ Figma component relationships
 ```
 
-The folder is named `{project-name}` (kebab-cased from `config.name`). If two projects share a name, append a short hash.
+**Global** (`workspaceLocation: "global"`):
+```
+<HOME>/.claude/figma-suite/{project-name}/
+├── config.json
+├── design-rules.md
+├── token-map.generated.md
+├── component-contracts.generated.md
+└── component-mapping.generated.md
+```
+
+Project-level is default when inside a codebase. Global is default (and the only option) for standalone mode. The folder is named `{project-name}` (kebab-cased from `config.name`). If two global projects share a name, append a short hash.

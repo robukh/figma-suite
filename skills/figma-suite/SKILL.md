@@ -44,25 +44,52 @@ If the Figma MCP server is connected but returns errors:
 
 Run `/figma-suite setup` to generate config and project mappings.
 
-All generated files go to **one location**: `<HOME>/.claude/figma-suite/{project-name}/`. This applies whether you're inside a codebase or working standalone. Nothing is placed in the project directory.
+### Workspace location
 
-- `<HOME>` — the user's home directory (`~` on macOS/Linux, `%USERPROFILE%` on Windows). Always resolve to the absolute path at runtime.
-- `{project-name}` — kebab-cased project name chosen during setup
+The skill supports three usage scenarios. During setup, it detects which applies and asks the user where to save:
+
+**Scenario 1: Standalone (no codebase)**
+The user launches Claude from their home folder or any non-project directory. Generated files go to `<HOME>/.claude/figma-suite/{project-name}/`. This is the only option — there's no project directory to save into.
+
+**Scenario 2: Inside a project — user chooses location**
+The user launches Claude from a project directory. Setup asks:
+```
+Where should I save the figma-suite workspace?
+1. Project-level (default) — .figma-suite/ in this project directory (shared with teammates via git)
+2. Global — <HOME>/.claude/figma-suite/{project-name}/ (personal, not committed)
+
+Reply with a number:
+```
+
+- **Project-level** (`{project-root}/.figma-suite/`): config and generated files live in the project. Teammates who install the skill see the same config. Add `.figma-suite/` to `.gitignore` if you don't want it committed, or commit it to share.
+- **Global** (`<HOME>/.claude/figma-suite/{project-name}/`): config is personal to this machine. Multiple users can have different configs for the same project.
+
+**Scenario 3: Skill installed at project level only**
+The skill lives in `.claude/skills/figma-suite/` inside the project. Works identically to Scenario 2 — setup asks the same location question.
+
+`<HOME>` — the user's home directory (`~` on macOS/Linux, `%USERPROFILE%` on Windows). Always resolve to the absolute path at runtime.
+
+### Auto-discovery order
+
+When invoked, the skill searches for an existing workspace in this order:
+
+1. `{project-root}/.figma-suite/config.json` — project-level workspace
+2. `<HOME>/.claude/figma-suite/*/config.json` — global workspace matching `projectPath`
+3. If neither found → run setup
+
+### Auto-discovery order for tokens (codebase mode)
+
+1. `design-tokens/*.tokens.json` — W3C Design Token Format (DTF/DTCG)
+2. `tokens/**/*.json` — Style Dictionary format
+3. `tailwind.config.js` / `tailwind.config.ts` — Tailwind theme tokens
+4. `src/global.css` or `src/styles/globals.css` — CSS custom properties
+5. `theme.ts` / `theme.js` — JS theme objects
+
+When auto-discovering, read each found file and classify tokens into: **colors**, **typography**, **spacing**, **radii**, **shadows**, **other**.
 
 The skill auto-detects whether you're in a codebase (scans tokens + components) or standalone (scans Figma file only).
 
 A project can reference **multiple library files** (published DS sources) and **multiple design files** (where screens are composed). See [config-schema.md](reference/config-schema.md) for the full config structure, field reference, and design rules file format.
-
-### Auto-discovery order (codebase mode)
-
-1. `<HOME>/.claude/figma-suite/*/config.json` — existing workspace for this project
-2. `design-tokens/*.tokens.json` — W3C Design Token Format (DTF/DTCG)
-3. `tokens/**/*.json` — Style Dictionary format
-4. `tailwind.config.js` / `tailwind.config.ts` — Tailwind theme tokens
-5. `src/global.css` or `src/styles/globals.css` — CSS custom properties
-6. `theme.ts` / `theme.js` — JS theme objects
-
-When auto-discovering, read each found file and classify tokens into: **colors**, **typography**, **spacing**, **radii**, **shadows**, **other**.
 
 ---
 
@@ -239,7 +266,10 @@ These tools work for published/external library data and file metadata:
 
 When invoked, run this discovery sequence before dispatching to a workflow:
 
-1. **Check for existing workspace**: Scan `<HOME>/.claude/figma-suite/*/config.json` for a config where `projectPath` matches the current directory
+1. **Check for existing workspace** (in order):
+   - `{current-directory}/.figma-suite/config.json` — project-level workspace
+   - `<HOME>/.claude/figma-suite/*/config.json` — global workspace where `projectPath` matches the current directory
+   - If neither found → run setup
 2. **Auto-discover tokens**: If no config or `tokenSource: "auto"`, scan for token files in the codebase
 3. **Identify framework**: Check for `tailwind.config.*`, `global.css`, `theme.*` to understand the styling system
 4. **Find components**: Scan configured or common paths (`src/components/ui`, `src/components`, `components/`)

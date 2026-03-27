@@ -59,7 +59,9 @@ Copy-Item -Recurse skills/figma-suite/ "$env:USERPROFILE/.claude/skills/figma-su
 
 Setup asks for your Figma file URLs, scans your libraries for variables and components, and generates project-specific design rules that guide all workflows.
 
-All generated files go to `<HOME>/.claude/figma-suite/{project-name}/` — nothing is placed in your project directory. (`<HOME>` = `~` on macOS/Linux, `%USERPROFILE%` on Windows.)
+During setup, you choose where to save the workspace:
+- **Project-level** (default) — `.figma-suite/` in your project directory (shareable with teammates)
+- **Global** — `<HOME>/.claude/figma-suite/{project-name}/` (personal, not committed)
 
 - **With a codebase** — scans your project for tokens and components
 - **Standalone** — paste Figma file URLs, no codebase needed

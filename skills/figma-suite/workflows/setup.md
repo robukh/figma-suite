@@ -8,8 +8,19 @@ First-time initialization. Scans the codebase (if any), discovers tokens and com
 
 ## Workspace Location
 
-All generated files always go to the same place, regardless of mode:
+Generated files go to one of two locations, chosen by the user during setup:
 
+**Project-level** (default when inside a codebase):
+```
+{project-root}/.figma-suite/
+├── config.json
+├── design-rules.md
+├── token-map.generated.md
+├── component-contracts.generated.md
+└── component-mapping.generated.md
+```
+
+**Global** (default when standalone, optional when inside a codebase):
 ```
 <HOME>/.claude/figma-suite/{project-name}/
 ├── config.json
@@ -19,9 +30,7 @@ All generated files always go to the same place, regardless of mode:
 └── component-mapping.generated.md
 ```
 
-- `{project-name}` — kebab-cased project name chosen by the user during setup (e.g., `my-mobile-app`)
-
-Nothing is placed in the user's project directory. See [config-schema.md](../reference/config-schema.md) for the full config structure.
+See [config-schema.md](../reference/config-schema.md) for the full config structure.
 
 ## Two Modes
 
@@ -29,12 +38,19 @@ Nothing is placed in the user's project directory. See [config-schema.md](../ref
 The user runs `/figma-suite` inside a project directory. Setup scans for tokens and components in the codebase, then stores results in the workspace. Config includes `"projectPath"` pointing back to the codebase.
 
 ### Mode B: Standalone (no codebase)
-The user wants to design in Figma without a codebase — just Figma file URLs. Setup scans the Figma files for existing variables and components. Config has `"mode": "standalone"` and no `projectPath`.
+The user wants to design in Figma without a codebase — just Figma file URLs. Setup scans the Figma files for existing variables and components. Config has `"mode": "standalone"` and no `projectPath`. Workspace always goes to the global location.
 
 ### Detection logic
 
 1. Check if the current directory is a project (has `package.json`, `Cargo.toml`, `pyproject.toml`, `.git`, or any code files)
-2. If yes → Mode A (scan codebase)
+2. If yes → Mode A (scan codebase). Ask workspace location:
+   ```
+   Where should I save the figma-suite workspace?
+   1. Project-level (default) — .figma-suite/ in this directory
+   2. Global — <HOME>/.claude/figma-suite/{project-name}/
+
+   Reply with a number:
+   ```
 3. If no → ask the user:
    ```
    I don't see a codebase in this directory. How would you like to proceed?
@@ -43,6 +59,7 @@ The user wants to design in Figma without a codebase — just Figma file URLs. S
 
    Reply with a number:
    ```
+   If standalone → workspace goes to global location automatically.
 4. Ask for a **project name** (used for the workspace folder):
    ```
    Project name (kebab-case, e.g. "my-mobile-app"):
@@ -339,7 +356,7 @@ Here are the design rules I generated based on your library:
 [generated content]
 
 You can edit this file at any time:
-  <HOME>/.claude/figma-suite/{project-name}/design-rules.md
+  [workspace-path]/design-rules.md
 
 Want me to save this, or would you like to make changes first?
 ```
@@ -368,7 +385,7 @@ The user can edit the file directly at any time. All workflows read it before op
 - [component-contracts path]
 
 ### Next steps
-1. Review and edit your design rules: <HOME>/.claude/figma-suite/{project-name}/design-rules.md
+1. Review and edit your design rules: [workspace-path]/design-rules.md
 2. Run `/figma-suite sync` to push/pull tokens
 3. Run `/figma-suite build-library` to create components
 ```
@@ -391,6 +408,7 @@ Running `/figma-suite setup` again will:
 
 Each project gets its own workspace folder with config, design rules, and generated files. They never interfere:
 
-- **All workspaces** live in `<HOME>/.claude/figma-suite/{project-name}/`
+- **Project-level workspaces** live in `{project-root}/.figma-suite/` — one per project, travels with the repo
+- **Global workspaces** live in `<HOME>/.claude/figma-suite/{project-name}/` — personal to this machine
 - Switching projects = switching directories (Claude Code handles this naturally)
-- Listing workspaces: scan `<HOME>/.claude/figma-suite/*/config.json`
+- Listing global workspaces: scan `<HOME>/.claude/figma-suite/*/config.json`
