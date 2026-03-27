@@ -24,6 +24,14 @@ Turns the official Figma MCP server into a full design workflow: proper auto-lay
 /plugin install figma-suite@figma-suite
 ```
 
+### Via skills CLI
+
+```bash
+npx skills add robukh/figma-suite
+```
+
+Select **Claude Code** when prompted for the agent.
+
 ### Manual install
 
 Clone or download this repo, then copy the skill folder.
