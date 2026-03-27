@@ -181,6 +181,59 @@ Figma's native **Slots** feature (Schema 2025, open beta) is superior to INSTANC
 
 ---
 
+## Variable Binding on Paints (Fills and Strokes)
+
+**Never use `setBoundVariable("fills", ...)` or `setBoundVariable("strokes", ...)` directly on a node.** Fills and strokes require binding on the paint object itself, not the node.
+
+```javascript
+// WRONG — throws "fills and strokes variable bindings must be set on paints directly"
+node.setBoundVariable("fills", 0, "color", colorVar);
+
+// CORRECT — create a paint with the variable bound, then assign it
+const paint = figma.variables.setBoundVariableForPaint(
+  figma.util.solidPaint("#ffffff"), "color", colorVar
+);
+node.fills = [paint];
+node.strokes = [strokePaint]; // same pattern for strokes
+```
+
+---
+
+## Renaming Variant Properties
+
+**Always rename variant component names BEFORE renaming variant property definitions.** Figma validates that all variant names use the current property keys. If you rename the property first, existing variant names become invalid.
+
+```javascript
+// WRONG order — editComponentProperty fails because children still reference old name
+btnSet.editComponentProperty("Property 1", { name: "size" });
+
+// CORRECT order:
+// 1. Rename all variant children first
+for (const child of btnSet.children) {
+  child.name = child.name.replace("Property 1=", "size=");
+}
+// 2. Now the property definition auto-updates to match
+```
+
+Note: `editComponentProperty` may still fail in some cases. Renaming children directly is the reliable approach — Figma infers property names from the `key=value` pattern in variant names.
+
+---
+
+## Safe Property Access in Audits
+
+When reading `boundVariables`, `fills`, `strokes`, or other mixed-type properties, some values may be Symbols or unexpected types. Always use safe checks:
+
+```javascript
+// WRONG — may throw "cannot convert symbol to number"
+if (variant.cornerRadius > 0 && !boundVars.topLeftRadius) { ... }
+
+// CORRECT — check type and existence first
+if (variant.topLeftRadius !== undefined && typeof variant.topLeftRadius === "number"
+    && variant.topLeftRadius > 0 && !bv.topLeftRadius) { ... }
+```
+
+---
+
 ## Known API Constraints
 
 - `letter-spacing` cannot be bound to variables — apply as raw value
@@ -191,3 +244,5 @@ Figma's native **Slots** feature (Schema 2025, open beta) is superior to INSTANC
 - `resize()` on a HUG axis gets overridden — only use it for FIXED axes
 - `layoutSizingHorizontal = "FILL"` can only be set AFTER the node is appended to an auto-layout parent
 - Font loading (`loadFontAsync`) must happen BEFORE setting `fontName` or `characters`
+- `editComponentProperty` for variant properties may fail — rename variant children directly instead
+- `setBoundVariable` on fills/strokes must use `setBoundVariableForPaint` on the paint object
