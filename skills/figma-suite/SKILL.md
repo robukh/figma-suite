@@ -151,25 +151,45 @@ Tokens, variables, components, and pages are never deleted. Stale items are flag
 ### Preserve existing work
 When updating Figma files, back up or duplicate affected frames before overwriting. When updating code tokens, show the diff before writing.
 
+### Work incrementally
+
+**Do one thing per `use_figma` call.** The most common cause of bugs is trying to do too much in a single call. Break complex tasks into small steps:
+
+1. **Inspect first** — read-only `use_figma` to discover existing pages, components, variables, naming conventions
+2. **Do one thing per call** — create variables in one call, components in the next, layouts in another
+3. **Return all node IDs** — always `return { createdNodeIds: [...], mutatedNodeIds: [...] }`
+4. **Validate after each step** — `get_metadata` for structure, `get_screenshot` for visuals
+5. **Fix before moving on** — don't build on a broken foundation
+
 ### Sequential Figma writes
 Never parallelize `use_figma` calls. Each must complete and be verified before the next.
 
-### Batch when possible
-When creating or updating many variables, write a single `use_figma` call that loops through all tokens in one Figma Plugin API script — much faster than one call per variable.
+### Page context resets between calls
+
+`figma.currentPage` always starts on the **first page** at the beginning of each `use_figma` call. If your workflow targets a non-default page, call `await figma.setCurrentPageAsync(page)` at the start of each call. The sync setter `figma.currentPage = page` throws — always use the async version.
 
 ### Error recovery
 
-When a write operation fails mid-execution:
+**`use_figma` is atomic — failed scripts do NOT execute.** If a script errors, no changes are made to the file. The file remains in the exact state before the call. This means it's safe to retry after fixing the script — no cleanup needed.
+
+When `use_figma` returns an error:
+
+1. **STOP** — do NOT immediately retry the same script
+2. **Read the error message** — understand what went wrong
+3. **If unclear**, call `get_metadata` or `get_screenshot` to check file state
+4. **Fix the script** and retry
+
+For code/file write failures (non-atomic):
 
 1. **Identify what succeeded** — read back from Figma or code to see which changes landed
 2. **Report partial state** — tell the user exactly what was applied and what wasn't
-3. **Never retry blindly** — re-read state first to avoid duplicates (e.g., creating the same variable twice)
-4. **Offer to resume** — present the remaining unapplied changes as a new dry-run report
-5. **Common failures and recovery:**
-   - `use_figma` timeout → split the batch into smaller chunks and retry each
-   - Stale nodeId → re-query the node via `get_metadata` or `search_design_system`
-   - Missing font → ask user to install the font or pick an available alternative
-   - File locked / concurrent edit → wait and retry once, then ask user to close other editors
+3. **Never retry blindly** — re-read state first to avoid duplicates
+4. **Offer to resume** — present remaining changes as a new dry-run report
+5. **Common failures:**
+   - `use_figma` timeout → split the batch into smaller chunks
+   - Stale nodeId → re-query via `get_metadata` or `use_figma`
+   - Missing font → ask user to install or pick an alternative
+   - File locked → wait and retry once, then ask user to close other editors
    - Rate limit → wait 5 seconds, retry with smaller batch size
 
 ---
@@ -312,7 +332,7 @@ Every fill, stroke, radius, padding, gap, font property must be bound to a varia
 
 ### Text Styles over individual bindings
 
-Apply typography via `setTextStyleIdAsync()`, not per-property `setBoundVariable()` calls. Text Styles bind all 4 properties (family, size, weight, line-height) as one unit. Create Text Styles during token sync.
+Apply typography via `setTextStyleIdAsync()`, not per-property `setBoundVariable()` calls. Text Styles bind all 4 properties (family, size, weight, line-height) as one unit. Create Text Styles during token sync with raw values — **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** (throws "not a function"). Variable binding on text styles must be done interactively in the Figma UI after the build.
 
 ### Build in dependency order
 

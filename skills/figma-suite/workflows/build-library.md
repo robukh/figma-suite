@@ -221,15 +221,25 @@ For each combination of variant axes:
 1. Duplicate the base component
 2. Override the bound variables for that variant
 3. Name using `Property=Value` format: `Variant=Primary, Size=Medium`
-4. Combine all variants into a component set using `combineAsVariants`
+4. **Add component properties BEFORE combining** — `addComponentProperty()` returns a dynamic key (e.g., `"label#4:0"`). Capture this key and link it to child nodes via `componentPropertyReferences`. See [plugin-api-patterns.md](../reference/plugin-api-patterns.md) for details.
+5. Combine all variants into a component set using `combineAsVariants`
+6. **Layout variants in a grid after combining** — all children stack at (0,0) after `combineAsVariants`. Position them in a grid and resize the ComponentSet:
+   ```javascript
+   cs.children.forEach((child, i) => {
+     child.x = (i % 4) * colWidth;
+     child.y = Math.floor(i / 4) * rowHeight;
+   });
+   let maxX = 0, maxY = 0;
+   for (const child of cs.children) {
+     maxX = Math.max(maxX, child.x + child.width);
+     maxY = Math.max(maxY, child.y + child.height);
+   }
+   cs.resizeWithoutConstraints(maxX + 40, maxY + 40);
+   ```
 
-### Step 4: Add component properties
+### Step 4: Verify component properties
 
-On the component set, define:
-- **Variant properties** — maps to the variant axis
-- **Boolean properties** — e.g., `Show Icon`, `Disabled`
-- **Text properties** — e.g., `Label` (for text override)
-- **Instance swap properties** — e.g., `Icon` slot
+After combining, verify the component set inherited all properties from its children. Do NOT add properties to the `ComponentSetNode` directly — add them to individual variant components before combining.
 
 ### Step 5: Screenshot and validate
 

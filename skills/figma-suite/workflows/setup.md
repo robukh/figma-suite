@@ -236,18 +236,26 @@ return JSON.stringify(result);
 ```
 
 ### Step 3: Scan local text styles and components
+
+**Important:** `figma.currentPage` resets to the first page at the start of each `use_figma` call. To find components across all pages, iterate through `figma.root.children` and switch pages:
+
 ```javascript
 const textStyles = await figma.getLocalTextStylesAsync();
 const ts = textStyles.map(s => ({ name: s.name, fontSize: s.fontSize, family: s.fontName?.family, style: s.fontName?.style }));
 
-const componentSets = figma.root.findAllWithCriteria({ types: ["COMPONENT_SET"] });
-const cs = componentSets.map(c => ({ name: c.name, page: c.parent?.parent?.name || c.parent?.name, id: c.id }));
+// Must switch pages to load their children
+const componentSets = [];
+const standaloneComponents = [];
+for (const page of figma.root.children) {
+  await figma.setCurrentPageAsync(page);
+  page.findAllWithCriteria({ types: ["COMPONENT_SET"] })
+    .forEach(c => componentSets.push({ name: c.name, page: page.name, id: c.id }));
+  page.findAllWithCriteria({ types: ["COMPONENT"] })
+    .filter(c => !c.parent || c.parent.type !== "COMPONENT_SET")
+    .forEach(c => standaloneComponents.push({ name: c.name, page: page.name, id: c.id }));
+}
 
-const standaloneComponents = figma.root.findAllWithCriteria({ types: ["COMPONENT"] })
-  .filter(c => !c.parent || c.parent.type !== "COMPONENT_SET");
-const sc = standaloneComponents.map(c => ({ name: c.name, page: c.parent?.parent?.name || c.parent?.name, id: c.id }));
-
-return JSON.stringify({ textStyles: ts, componentSets: cs, standaloneComponents: sc });
+return JSON.stringify({ textStyles: ts, componentSets, standaloneComponents });
 ```
 
 **Critical:** Always use `return JSON.stringify(...)` — never `console.log()`. Console output is discarded.
