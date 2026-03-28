@@ -9,7 +9,8 @@
       "WebSearch",
       "mcp__figma__*",
       "WebFetch(domain:skills.sh)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

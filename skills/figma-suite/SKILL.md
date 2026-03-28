@@ -302,21 +302,35 @@ When invoked, run this discovery sequence before dispatching to a workflow:
 
 These apply whenever creating or modifying Figma components — in `build-library`, `design`, or any ad-hoc component work. For Plugin API implementation details, see [build-library.md](workflows/build-library.md) and [component-contracts.md](reference/component-contracts.md).
 
+### No silent skipping
+
+**Every rule below MUST be followed for every qualifying element.** If you decide a rule doesn't apply to a specific element (e.g., a decorative separator doesn't need a TEXT property), you MUST report it as an explicit exception with a reason. Silently skipping a binding or property is a bug — it produces components that look complete but are broken for consumers.
+
 ### Every text layer = TEXT property + boolean toggle
 
-Every user-facing text layer in a component must have:
+Every user-facing text layer in a component MUST have:
 1. A **TEXT property** so consumers can edit it without drilling into layers
 2. A **BOOLEAN property** to show/hide it (e.g., `Show Description`)
+
+**When to skip:** Internal layout helpers, decorative characters, or separators that consumers should never edit. Report each skip as an exception.
 
 Example: Dialog has Title (text + `Show Title`) and Body (text + `Show Body`). This lets consumers create a title-only dialog by hiding the body.
 
 ### Every child component = INSTANCE_SWAP + boolean toggle
 
-Every nested component instance must have:
+Every nested component instance MUST have:
 1. An **INSTANCE_SWAP property** so consumers can swap variants/components
 2. A **BOOLEAN property** to show/hide it (e.g., `Show CTA`, `Show Icon`)
 
+**When to skip:** Structural instances that are integral to the component's layout and should never be swapped (e.g., an internal spacer component). Report as exception.
+
 Never use raw frames as content slots — only INSTANCE_SWAP properties.
+
+### Every visual property = variable binding
+
+Every fill, stroke, radius, padding (all 4 sides individually), gap, and font property MUST be bound to a variable. Walk every node and bind each property — do not rely on "looks correct" as a proxy for "is bound."
+
+**When to skip:** One-off decorative values with no matching variable in the scale, gradient fills (which don't support variable binding), or image fills. Use the raw value and report as exception.
 
 ### Expose nested properties
 
@@ -324,15 +338,17 @@ Bubble up the most-used child properties to the parent level. If Dialog nests a 
 
 ### Hug contents by default
 
-Parent components must use **Hug Contents** so they adapt when children resize, get hidden, or get swapped. Only use Fixed height when a design token defines it (e.g., button heights).
-
-### Zero raw values
-
-Every fill, stroke, radius, padding, gap, font property must be bound to a variable. No hex codes, no pixel numbers, no font names. If the variable doesn't exist, create it first.
+Parent components MUST use **Hug Contents** so they adapt when children resize, get hidden, or get swapped. Only use Fixed height when a design token defines it (e.g., button heights).
 
 ### Text Styles over individual bindings
 
-Apply typography via `setTextStyleIdAsync()`, not per-property `setBoundVariable()` calls. Text Styles bind all 4 properties (family, size, weight, line-height) as one unit. Create Text Styles during token sync with raw values — **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** (throws "not a function"). Variable binding on text styles must be done interactively in the Figma UI after the build.
+Every text layer MUST have a Text Style applied via `setTextStyleIdAsync()`. Text Styles bind all 4 properties (family, size, weight, line-height) as one unit. **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** — create Text Styles with raw values during token sync; variable binding on styles must be done interactively in the Figma UI after the build.
+
+**When to skip:** If no matching text style exists, set raw font properties and report as exception.
+
+### Mandatory verification
+
+After creating or modifying any component, you MUST run the programmatic verification script (see [component-contracts.md](reference/component-contracts.md#verification-script)). This catches unbound properties, missing component properties, and unapplied text styles. Fix all violations before proceeding. Report all exceptions to the user.
 
 ### Build in dependency order
 

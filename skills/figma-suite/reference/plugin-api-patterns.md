@@ -327,6 +327,26 @@ collection.renameMode(collection.modes[0].modeId, "Light");
 collection.addMode("Dark");
 ```
 
+### Variable Modes on Components
+
+Components do NOT automatically use non-default variable modes. All nodes default to the collection's first mode. To render a component in a specific mode (e.g., Dark), you MUST set it explicitly:
+
+```javascript
+comp.setExplicitVariableModeForCollection(collectionId, darkModeId);
+```
+
+Without this call, dark mode variants and alternative themes will render using the default (Light) mode values, even if the variable has Dark mode values defined.
+
+---
+
+## Font Property Binding Limitation
+
+**`fontSize`, `fontWeight`, and `lineHeight` are NOT bindable via `setBoundVariable()` on text nodes.** Attempting this silently fails — the binding appears to succeed but has no effect.
+
+Typography MUST be applied through **Text Styles** (`setTextStyleIdAsync`). Text Styles carry font family, size, weight, and line height as a single unit. See the Text Style Application section above.
+
+Additionally, **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** (throws "not a function"). Create Text Styles with raw values; variable binding on styles must be done interactively in the Figma UI.
+
 ---
 
 ## Node Positioning
@@ -506,6 +526,9 @@ if (typeof variant.topLeftRadius === "number" && variant.topLeftRadius > 0) { ..
 - `editComponentProperty` for variant properties may fail — rename children directly
 - `setBoundVariable` on fills/strokes must use `setBoundVariableForPaint`
 - `setBoundVariable` on TextStyle objects does NOT work in headless `use_figma`
+- `fontSize`, `fontWeight`, `lineHeight` are NOT bindable via `setBoundVariable` on text nodes — use Text Styles
+- Component property keys have `#uid` suffixes (e.g., `"Label#4:0"`) — never hardcode, always capture from `addComponentProperty`
+- Components don't auto-use non-default variable modes — must call `setExplicitVariableModeForCollection`
 - `figma.notify()` throws "not implemented" — use `return`
 - `getPluginData()`/`setPluginData()` not supported — use `getSharedPluginData()`
 - `counterAxisAlignItems` does not accept `'STRETCH'` — use `'MIN'` + child `FILL`
