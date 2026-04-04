@@ -7,6 +7,20 @@ description: >
   designing new screens in Figma, or auditing Figma files for design system compliance.
 argument-hint: "[sync|build-library|design|audit|update-guide] [options]"
 allowed-tools: Read, Write, Edit, Glob, Grep, WebSearch, mcp__figma__get_design_context, mcp__figma__get_screenshot, mcp__figma__get_metadata, mcp__figma__search_design_system, mcp__figma__use_figma, mcp__figma__get_variable_defs, mcp__figma__generate_figma_design, mcp__figma__get_figjam, mcp__figma__whoami, mcp__figma__get_code_connect_map, mcp__figma__get_code_connect_suggestions, mcp__figma__send_code_connect_mappings, mcp__figma__add_code_connect_map, mcp__figma__create_design_system_rules
+compatibility: >
+  Requires the official Figma MCP server (https://mcp.figma.com/mcp), a first-party
+  remote endpoint operated by Figma, Inc. The mcp__figma__use_figma tool sends Figma
+  Plugin API code to this server for execution within the user's authenticated Figma
+  session. All operations require user-initiated OAuth authentication and edit access
+  to the target Figma files. No data is sent to any third-party or skill-author-controlled
+  endpoint.
+metadata:
+  author: robukh
+  version: "1.2.0"
+  external-endpoint: https://mcp.figma.com/mcp
+  external-endpoint-provider: Figma, Inc.
+  external-endpoint-auth: OAuth (user-initiated)
+  external-endpoint-docs: https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/
 ---
 
 # Figma Design Skill
