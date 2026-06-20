@@ -1,22 +1,18 @@
 # Design Judgment — Build Like a Senior
 
-This is the craft layer. The other reference files tell you **how** the Plugin API works and
-**what** every rule mandates. This file tells you **why a senior product designer does it that
-way, and what they reject on sight.**
+The craft layer: **why** a senior designs this way and **what they reject on sight**. A component
+that passes the verification script can still be amateur work — mechanics are necessary, not
+sufficient. Read before `build-library` or `design`; apply on every component, not just flagged ones.
 
-A component that passes the verification script can still be amateur work. Mechanics are
-necessary, not sufficient. Read this before `build-library` or `design`, and apply its judgment
-on every component — not just the ones the checklist flags.
-
-> **How to use this file:** each section ends with a **A senior rejects** list. Those are the
-> red flags. The audit workflow scores against them; the build workflows must not produce them.
+> Each section ends with a **A senior rejects** list — the red flags. The audit scores against
+> them; the build workflows must not produce them.
 
 ---
 
 ## 1. Token Judgment
 
-The single most common amateur mistake is **picking a token by its pixel value instead of its
-role.** Tokens are not a lookup table from px → variable. They encode *intent*.
+The most common amateur mistake: **picking a token by its pixel value instead of its role.** Tokens
+encode *intent*, not a px → variable lookup.
 
 ### Three tiers, reference flows downward only
 
@@ -37,18 +33,14 @@ Component   component-scoped:              button-padding-x, card-radius   ← u
 
 ### Pick by role, not by pixel
 
-> When `spacing-4` and `gap-inline` both resolve to `8px`, they are **not interchangeable.**
+When `spacing-4` and `gap-inline` both resolve to `8px`, they are **not interchangeable.** Bind a
+button's icon-to-label gap to `gap-inline` (the semantic token for inline-sibling space), not
+`spacing-4` (the primitive it happens to reference today). If inline gaps later change to `6px`,
+only `gap-inline`'s alias moves — everything bound to it updates; everything bound to `spacing-4`
+(a different decision) does not. Binding to the primitive throws that distinction away.
 
-- `gap-inline` is the *semantic* token for space between inline siblings. Bind a button's icon-to-
-  label gap to `gap-inline`.
-- `spacing-4` is the *primitive* that `gap-inline` happens to reference today. If the design
-  system later decides inline gaps should be `6px`, only `gap-inline`'s alias changes — everything
-  bound to it updates, and everything bound to `spacing-4` (a different decision) does not.
-- **Binding to the primitive throws away that distinction.** Two things that are the same pixel
-  *today* for different *reasons* must use different semantic tokens.
-
-When several tokens pixel-match, ask: *what is this space/color FOR?* Bind the one whose **name
-describes the reason**, not just the value.
+When several tokens pixel-match, ask *what is this FOR?* and bind the one whose **name describes
+the reason**, not just the value.
 
 ### Name for role, not appearance
 
@@ -62,11 +54,9 @@ a primitive masquerading as a semantic — fix the name or move it to the primit
 Create a new token **only** when a visual decision (a) recurs across more than one place, **or**
 (b) carries distinct intent the existing set can't express. Otherwise alias an existing one.
 
-- Many semantics may alias one primitive — that's correct (single source of truth).
-- A one-off value used in exactly one place is usually **not** a token; use the raw value and log
-  it as an exception (per the no-silent-skipping rule).
-- Don't mint `accent-blue-2` because a design used a slightly different blue once. Ask whether the
-  design is right first.
+- Many semantics may alias one primitive — correct (single source of truth).
+- A one-off value used in exactly one place is usually **not** a token — use the raw value and log
+  an exception. Don't mint `accent-blue-2` for a one-off; question the design first.
 
 ### The component-token tier is optional — default to two tiers
 
@@ -95,8 +85,7 @@ picker and invites misuse. (Scoping syntax: SKILL.md "Variable scoping rules".)
 
 ## 2. Component Anatomy
 
-A well-built component is a **contract with its consumer**, not a picture that happens to look
-right.
+A well-built component is a **contract with its consumer**, not a picture that looks right.
 
 ### Expose intent, hide implementation
 

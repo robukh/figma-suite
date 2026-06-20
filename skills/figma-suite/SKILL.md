@@ -48,11 +48,11 @@ If the server is not configured, guide the user to set it up:
 
 ### Troubleshooting
 
-If the Figma MCP server is connected but returns errors:
-- **Auth expired:** Ask the user to re-authenticate via the MCP server's OAuth flow
-- **File not found / no access:** Verify the user has edit access to the Figma file
-- **Rate limits:** Wait briefly and retry; batch operations to reduce call count
-- **Plugin API errors:** Check the error message from `use_figma` — common causes are stale nodeIds or missing fonts
+Server connected but returning errors:
+- **Auth expired** → re-authenticate via OAuth
+- **File not found / no access** → verify edit access to the file
+- **Rate limits** → wait briefly, retry, batch to reduce call count
+- **Plugin API errors** → read the `use_figma` error; usually stale nodeIds or missing fonts
 
 ---
 
@@ -62,13 +62,7 @@ Run `/figma-suite setup` to generate config and project mappings.
 
 ### Workspace location
 
-The skill supports three usage scenarios. During setup, it detects which applies and asks the user where to save:
-
-**Scenario 1: Standalone (no codebase)**
-The user launches Claude from their home folder or any non-project directory. Generated files go to `<HOME>/.claude/figma-suite/{project-name}/`. This is the only option — there's no project directory to save into.
-
-**Scenario 2: Inside a project — user chooses location**
-The user launches Claude from a project directory. Setup asks:
+Setup detects the scenario and asks where to save. Inside a project, ask:
 ```
 Where should I save the figma-suite workspace?
 1. Project-level (default) — .figma-suite/ in this project directory (shared with teammates via git)
@@ -77,17 +71,15 @@ Where should I save the figma-suite workspace?
 Reply with a number:
 ```
 
-- **Project-level** (`{project-root}/.figma-suite/`): config and generated files live in the project. Teammates who install the skill see the same config. Add `.figma-suite/` to `.gitignore` if you don't want it committed, or commit it to share.
-- **Global** (`<HOME>/.claude/figma-suite/{project-name}/`): config is personal to this machine. Multiple users can have different configs for the same project.
+| Scenario | Save location |
+|----------|---------------|
+| Standalone (no codebase) | `<HOME>/.claude/figma-suite/{project-name}/` (only option) |
+| Inside a project — project-level (default) | `{project-root}/.figma-suite/` (shared; `.gitignore` it to keep local) |
+| Inside a project — global | `<HOME>/.claude/figma-suite/{project-name}/` (personal, per-machine) |
 
-**Scenario 3: Skill installed at project level only**
-The skill lives in `.claude/skills/figma-suite/` inside the project. Works identically to Scenario 2 — setup asks the same location question.
+`<HOME>` = home directory (`~` macOS/Linux, `%USERPROFILE%` Windows) — resolve to absolute path at runtime.
 
-`<HOME>` — the user's home directory (`~` on macOS/Linux, `%USERPROFILE%` on Windows). Always resolve to the absolute path at runtime.
-
-### Auto-discovery order
-
-When invoked, the skill searches for an existing workspace in this order:
+### Auto-discovery order (workspace)
 
 1. `{project-root}/.figma-suite/config.json` — project-level workspace
 2. `<HOME>/.claude/figma-suite/*/config.json` — global workspace matching `projectPath`
@@ -101,11 +93,7 @@ When invoked, the skill searches for an existing workspace in this order:
 4. `src/global.css` or `src/styles/globals.css` — CSS custom properties
 5. `theme.ts` / `theme.js` — JS theme objects
 
-When auto-discovering, read each found file and classify tokens into: **colors**, **typography**, **spacing**, **radii**, **shadows**, **other**.
-
-The skill auto-detects whether you're in a codebase (scans tokens + components) or standalone (scans Figma file only).
-
-A project can reference **multiple library files** (published DS sources) and **multiple design files** (where screens are composed). See [config-schema.md](reference/config-schema.md) for the full config structure, field reference, and design rules file format.
+Classify discovered tokens into: **colors**, **typography**, **spacing**, **radii**, **shadows**, **other**. A project can reference **multiple library files** and **multiple design files** — see [config-schema.md](reference/config-schema.md) for the full config structure.
 
 ---
 
@@ -157,20 +145,20 @@ Project name (kebab-case, e.g. "my-mobile-app"):
 ```
 
 ### Dry-run first
-Every write operation must produce a **dry-run report** first. Never write to Figma or code without user approval.
+Every write produces a **dry-run report** first. Never write to Figma or code without user approval.
 
 ### Screenshot validation
-After every visual change in Figma, capture a screenshot with `mcp__figma__get_screenshot` and verify the result. Maximum 3 fix iterations per section.
+After every visual change, capture a screenshot with `mcp__figma__get_screenshot` and verify. Max 3 fix iterations per section.
 
 ### Never delete without confirmation
-Tokens, variables, components, and pages are never deleted. Stale items are flagged in the report for the user to decide.
+Never delete tokens, variables, components, or pages. Flag stale items in the report for the user to decide.
 
 ### Preserve existing work
-When updating Figma files, back up or duplicate affected frames before overwriting. When updating code tokens, show the diff before writing.
+Back up / duplicate affected Figma frames before overwriting; show the diff before writing code tokens.
 
 ### Work incrementally
 
-**Do one thing per `use_figma` call.** The most common cause of bugs is trying to do too much in a single call. Break complex tasks into small steps:
+**Do one thing per `use_figma` call** — the top cause of bugs is doing too much in one call.
 
 1. **Inspect first** — read-only `use_figma` to discover existing pages, components, variables, naming conventions
 2. **Do one thing per call** — create variables in one call, components in the next, layouts in another
@@ -187,7 +175,7 @@ Never parallelize `use_figma` calls. Each must complete and be verified before t
 
 ### Error recovery
 
-**`use_figma` is atomic — failed scripts do NOT execute.** If a script errors, no changes are made to the file. The file remains in the exact state before the call. This means it's safe to retry after fixing the script — no cleanup needed.
+**`use_figma` is atomic — failed scripts do NOT execute.** On error, no changes land; the file stays exactly as before. Safe to retry after fixing the script — no cleanup needed.
 
 When `use_figma` returns an error:
 
@@ -248,23 +236,14 @@ All variables must have `codeSyntax` with the `var()` wrapper for web consumptio
 codeSyntax: { WEB: "var(--token-name)" }
 ```
 
-### Choosing the right token (not just the matching pixel)
+### Choosing the right token
 
-The two-collection model above is the *structure*. Using it well is *judgment* — and the most
-common amateur mistake is picking a token by its pixel value instead of its role:
+- **Consume the Semantic tier; Primitives are reference-only** — bind to `action-primary`, never `blue-500`.
+- **Pick by role when tokens pixel-match** — inline gap → `gap-inline`, not any 8px `spacing-4`.
+- **Reuse before you create** — a one-off is a raw value + logged exception, not a token.
+- **Two tiers is the default** — add a component-token tier only at enterprise scale.
 
-- **Consume the Semantic tier; Primitives are reference-only.** Bind a node to `action-primary`,
-  never directly to `blue-500`. Primitives are scoped `[]` (hidden) so they don't appear in
-  pickers — a direct primitive binding can't be themed and hides intent.
-- **Pick by role when several tokens pixel-match.** If `spacing-4` and `gap-inline` both resolve
-  to 8px, an inline gap binds to `gap-inline` — the token whose *name describes the reason*. They
-  are not interchangeable just because they're equal today.
-- **Reuse before you create.** Mint a new token only when a decision recurs or carries distinct
-  intent the set can't express. A one-off is a raw value + logged exception, not a token.
-- **Two tiers is the default.** Add a component-token tier (`button-padding-x`) only at enterprise
-  scale or for genuine token families — don't over-engineer.
-
-Full reasoning, examples, and the reject list: [design-judgment.md §1](reference/design-judgment.md#1-token-judgment).
+Full reasoning + reject list: [design-judgment.md §1](reference/design-judgment.md#1-token-judgment).
 
 ---
 
@@ -336,99 +315,61 @@ When invoked, run this discovery sequence before dispatching to a workflow:
 
 ## Component Creation Rules
 
-These apply whenever creating or modifying Figma components — in `build-library`, `design`, or any ad-hoc component work.
-
-**A passing verification script is necessary, not sufficient — it does not make a component senior-quality.** Before building, read [design-judgment.md](reference/design-judgment.md): the craft layer that explains *why* each rule below exists and *what a senior rejects on sight* (token-tier choice, component anatomy, variant economics, composition, iconography, and the master red-flag list the audit scores against). The rules below are the floor; design-judgment.md is the bar.
-
-For Plugin API implementation details, see [plugin-api-patterns.md](reference/plugin-api-patterns.md), [build-library.md](workflows/build-library.md), and [component-contracts.md](reference/component-contracts.md).
+Apply when creating or modifying Figma components — `build-library`, `design`, or ad-hoc. The rules below are the floor; the *why* and what-a-senior-rejects live in [design-judgment.md](reference/design-judgment.md) — read it before building. Plugin API details: [plugin-api-patterns.md](reference/plugin-api-patterns.md), [build-library.md](workflows/build-library.md), [component-contracts.md](reference/component-contracts.md).
 
 ### No silent skipping
 
-**Every rule below MUST be followed for every qualifying element.** If you decide a rule doesn't apply to a specific element (e.g., a decorative separator doesn't need a TEXT property), you MUST report it as an explicit exception with a reason. Silently skipping a binding or property is a bug — it produces components that look complete but are broken for consumers.
+Every rule below MUST be followed for every qualifying element. If a rule doesn't apply to an element, report it as an explicit exception with a reason. A silently skipped binding or property is a bug — it looks complete but is broken for consumers.
 
 ### Every text layer = TEXT property + boolean toggle
 
-**Why:** a component is a contract with its consumer. If text can only be changed by drilling into nested layers, the component is broken for everyone who isn't its author. The boolean lets a consumer compose variations (a title-only dialog) without a new variant.
+Every user-facing text layer MUST have:
+1. A **TEXT property** (edit without drilling into layers)
+2. A **BOOLEAN property** to show/hide (e.g., `Show Description`)
 
-Every user-facing text layer in a component MUST have:
-1. A **TEXT property** so consumers can edit it without drilling into layers
-2. A **BOOLEAN property** to show/hide it (e.g., `Show Description`)
-
-**When to skip:** Internal layout helpers, decorative characters, or separators that consumers should never edit. Report each skip as an exception.
-
-Example: Dialog has Title (text + `Show Title`) and Body (text + `Show Body`). This lets consumers create a title-only dialog by hiding the body.
-
-**A senior rejects:** an exposed property that binds to nothing; user-facing text with no TEXT property. See [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy).
+**Skip:** internal layout helpers, decorative characters, separators — report as exception. → [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy)
 
 ### Every content slot = SLOT (or INSTANCE_SWAP fallback) + boolean toggle
 
-**Why:** composition control. A raw frame is a dead end — consumers can't drop content into it or swap it. A native SLOT is the React-`children` model; INSTANCE_SWAP lets a consumer pick a specific child (which icon, which avatar). The property *kind* encodes intent (slot = freeform, swap = a chosen component).
+Every nested instance / content region MUST have:
+1. A **SLOT property** (native — `createSlot()` / `addComponentProperty(name, "SLOT", ...)`) for freeform content, **or** an **INSTANCE_SWAP property** for swapping a specific component (icon, avatar; also the fallback on older runtimes)
+2. A **BOOLEAN property** to show/hide (e.g., `Show CTA`)
 
-Every nested component instance / content region MUST have:
-1. A **SLOT property** (native, GA since 2026-06-10 — `createSlot()` / `addComponentProperty(name, "SLOT", ...)`) for freeform content regions, **or** an **INSTANCE_SWAP property** for swapping a specific component (icon, avatar). INSTANCE_SWAP is also the fallback on older Figma runtimes.
-2. A **BOOLEAN property** to show/hide it (e.g., `Show CTA`, `Show Icon`)
-
-**When to skip:** Structural instances that are integral to the component's layout and should never be swapped or filled (e.g., an internal spacer component). Report as exception.
-
-Never use raw frames as content slots — only SLOT or INSTANCE_SWAP properties.
-
-**A senior rejects:** a raw frame used as a slot; a swappable-content region with no property. See [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy).
+Never use raw frames as content slots. **Skip:** structural instances integral to layout (e.g., an internal spacer) — report as exception. → [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy)
 
 ### Every visual property = variable binding (pick the *semantically correct* token)
 
-**Why:** token binding is what makes a library themeable and maintainable — a single token change re-themes everything bound to it. But binding is only half the craft: **bind the token whose *role* matches, not just the one whose *pixel value* matches.** When `spacing-4` and `gap-inline` both equal 8px, an inline gap binds to `gap-inline` (a primitive binding throws away the distinction). Consume the **semantic** tier; primitives are reference-only.
+Every fill, stroke, radius, padding (all 4 sides individually), gap, and font property MUST be bound to a variable. Walk every node — don't use "looks correct" as a proxy for "is bound." **Bind the token whose *role* matches, not just the one whose *pixel value* matches** (inline gap → `gap-inline`, not any 8px `spacing-4`). Consume the semantic tier; primitives are reference-only.
 
-Every fill, stroke, radius, padding (all 4 sides individually), gap, and font property MUST be bound to a variable. Walk every node and bind each property — do not rely on "looks correct" as a proxy for "is bound."
-
-**When to skip:** One-off decorative values with no matching variable in the scale, gradient fills (which don't support variable binding), or image fills. Use the raw value and report as exception.
-
-**A senior rejects:** a raw hex/px where a token exists; a node bound to a **primitive** where a semantic exists; the wrong-role token bound because it happened to pixel-match. See [design-judgment.md §1](reference/design-judgment.md#1-token-judgment).
+**Skip:** one-off decorative values with no matching variable, gradient/image fills — use raw value, report as exception. → [design-judgment.md §1](reference/design-judgment.md#1-token-judgment)
 
 ### No text glyphs as icons
 
-**Why:** a typed `✕` / `✓` / `→` is not an icon — it renders inconsistently across platforms and fonts, can't be system-recolored or resized, and can't be swapped. It's the canonical amateur tell.
-
-Before creating any glyph/icon as text **or** an ad-hoc vector, search the file for an existing icon component (e.g. an `Icons` page) and **instance it**. If none exists, create a proper vector icon component first. Text characters are never acceptable substitutes for a DS icon.
-
-**A senior rejects:** text-as-icon; an ad-hoc vector when an icon component already exists. See [design-judgment.md §5](reference/design-judgment.md#5-iconography).
+Before creating any glyph/icon as text **or** ad-hoc vector, search the file for an existing icon component and **instance it**. If none exists, create a proper vector icon component first. Text characters (`✕`/`✓`/`→`) are never acceptable substitutes for a DS icon. → [design-judgment.md §5](reference/design-judgment.md#5-iconography)
 
 ### Expose nested properties
 
-**Why:** consumers reach for the most-used child property constantly — making them drill into a nested instance to set it is friction. Bubble it up. ("Most-used" is a judgment about what the consumer actually reaches for, not "expose everything.")
-
-Bubble up the most-used child properties to the parent level. If Dialog nests a Button, expose `CTA Label` on the Dialog itself so consumers don't have to drill into the Button instance.
+Bubble up the most-used child properties to the parent. If Dialog nests a Button, expose `CTA Label` on the Dialog so consumers don't drill into the Button instance.
 
 ### Hug contents by default; sizing is a per-layer contract
 
-**Why:** a component must adapt when children resize, hide, or swap — Hug Contents is what makes that automatic. And every layer's Hug-vs-Fill is a deliberate decision: the most common lopsided-layout bug is **a child set to HUG that should FILL** (an input that won't stretch to its row).
-
-Parent components MUST use **Hug Contents** so they adapt when children resize, get hidden, or get swapped. Only use Fixed height when a design token defines it (e.g., button heights). Set each child's `FILL` vs `HUG` deliberately — containers that should stretch use `FILL`, content that defines its own size uses `HUG`.
-
-**A senior rejects:** a child HUG that should FILL (lopsided layout); Fixed sizing where no token defines the dimension. See [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy).
+Parent components MUST use **Hug Contents** (adapt when children resize, hide, swap). Use Fixed only when a design token defines the dimension (e.g., button height). Set each child's `FILL` vs `HUG` deliberately — containers that stretch use `FILL`, content that defines its own size uses `HUG`. → [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy)
 
 ### Variant axes: only for meaningful difference
 
-**Why:** variant count is the *product* of all axis value-counts — each added 2-value axis **doubles** the set, which is how a button reaches 1,600 variants. A toggle (with/without icon) is a **boolean**, not a variant axis. Promote to a variant property only what changes the component's anatomy or visual treatment; everything else → boolean / text / instance-swap, which don't multiply.
-
-Build **one** canonical variant 100% complete and verified, **then** clone it per remaining variant and rebind only what differs. Cloning an incomplete variant multiplies every omission across the set.
-
-**A senior rejects:** a combinatorial variant set where axes should be booleans; cloning before the canonical variant is verified; missing states (happy-path frame only). See [design-judgment.md §3](reference/design-judgment.md#3-variant-set-design).
+Variant count = product of all axis value-counts; each 2-value axis doubles the set. Promote to a variant property only what changes anatomy/visual treatment; everything else → boolean / text / instance-swap (these don't multiply). A with/without-icon toggle is a boolean, not a variant. Build **one** canonical variant 100% complete and verified, **then** clone it and rebind only what differs. → [design-judgment.md §3](reference/design-judgment.md#3-variant-set-design)
 
 ### Text Styles over individual bindings
 
-**Why:** typography is coherent only when family/size/weight/line-height move as one unit — a Text Style is that unit and the single source of truth. Binding the four properties individually is both fragile and, in headless `use_figma`, impossible.
+Every text layer MUST have a Text Style applied via `setTextStyleIdAsync()` — it binds family/size/weight/line-height as one unit. **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** — create Text Styles with raw values during token sync; bind variables on styles interactively in the Figma UI after the build.
 
-Every text layer MUST have a Text Style applied via `setTextStyleIdAsync()`. Text Styles bind all 4 properties (family, size, weight, line-height) as one unit. **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** — create Text Styles with raw values during token sync; variable binding on styles must be done interactively in the Figma UI after the build.
-
-**When to skip:** If no matching text style exists, set raw font properties and report as exception.
-
-**A senior rejects:** ad-hoc font sizes outside the type scale; individual font-property bindings instead of a Text Style. See [design-judgment.md §4](reference/design-judgment.md#4-visual-hierarchy--composition).
+**Skip:** no matching text style → set raw font properties, report as exception. → [design-judgment.md §4](reference/design-judgment.md#4-visual-hierarchy--composition)
 
 ### Mandatory verification — report a verification table
 
-After creating or modifying any component, you MUST run the programmatic verification script (see [component-contracts.md](reference/component-contracts.md#verification-script)). This catches unbound properties, missing component properties, and unapplied text styles. Fix all violations before proceeding.
+After creating/modifying any component, you MUST run the verification script ([component-contracts.md](reference/component-contracts.md#verification-script)) — it catches unbound properties, missing component properties, unapplied text styles. Fix all violations before proceeding.
 
-**Don't just screenshot or report "done" — output a verification table** so the result is evidence, not a claim. One row per rule with its actual value:
+**Don't just screenshot or claim "done" — output a verification table** (one row per rule, actual value) so the result is evidence:
 
 | Rule | Status | Actual |
 |------|--------|--------|
@@ -437,7 +378,7 @@ After creating or modifying any component, you MUST run the programmatic verific
 | Text Style applied | FAIL | raw Inter 16 — no style |
 | … | … | … |
 
-Report all exceptions to the user alongside the table.
+Report all exceptions alongside the table.
 
 ### Build in dependency order
 
@@ -445,11 +386,11 @@ Tier 1 (primitives) → Tier 2 (interactive) → Tier 3 (containers) → Tier 4 
 
 ### File flexibility
 
-Works in any setup: single file, separate library file(s), no library yet, or adding to an existing library. The config supports multiple libraries and multiple design files — see [config-schema.md](reference/config-schema.md). The only difference is where components are created and whether publishing is needed after.
+Works in any setup: single file, separate library file(s), no library yet, or adding to an existing one. Config supports multiple libraries and design files — see [config-schema.md](reference/config-schema.md).
 
 ### Component mapping
 
-Code and Figma components are not always 1:1. Setup generates a `component-mappings/` directory (relative within workspace) with one **Zod-validated** `{id}.json` per component, tracking both the relationship *and* property-/value-level mapping. See [mapping-schema.md](reference/mapping-schema.md) for the schema, examples, validation, the filename==id rule, and the Code Connect bridge.
+Setup generates `component-mappings/` (in workspace) — one **Zod-validated** `{id}.json` per component, tracking the relationship *and* property-/value-level mapping. See [mapping-schema.md](reference/mapping-schema.md) for schema, examples, validation, the filename==id rule, and Code Connect bridge.
 
 Per-entry **status**:
 
@@ -460,9 +401,9 @@ Per-entry **status**:
 - **merged** — multiple code components → one Figma component
 - **diverged** — both exist but intentionally differ (document why)
 
-Each entry also carries a flexible `propertyMap` linking code props ↔ Figma properties (names may differ, e.g. code `style` ↔ Figma `Type`) with `figmaValue → codeValue` value maps. This is what lets the agent translate correctly in both directions.
+Each entry's `propertyMap` links code props ↔ Figma properties (names may differ, e.g. code `style` ↔ Figma `Type`) with `figmaValue → codeValue` value maps — this drives translation in both directions.
 
-These files are user-editable and Zod-validated (validate by inspection, or `node skills/figma-suite/schema/validate.mjs <workspace>/component-mappings/`). All workflows respect them: sync diffs against them and updates only the changed files each loop, build-library skips code-only, audit ignores diverged with documented reason, design uses the correct Figma component and value regardless of code structure. Re-running setup adds only new `{id}.json` files, never clobbering existing ones.
+Files are user-editable and Zod-validated (by inspection, or `node skills/figma-suite/schema/validate.mjs <workspace>/component-mappings/`). All workflows respect them: sync updates only changed files each loop, build-library skips code-only, audit ignores documented `diverged`, design uses the correct Figma component/value. Re-running setup adds only new `{id}.json` files, never clobbering existing ones.
 
 ---
 

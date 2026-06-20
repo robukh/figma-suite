@@ -6,39 +6,18 @@ Generate a professional-grade Figma component library from codebase components. 
 
 ## Overview
 
-This workflow reads UI components from the codebase, understands their props/variants/states, and creates corresponding Figma component sets with proper variable bindings, auto-layout, and variant properties.
-
-**Typical scope:** 20-100+ `use_figma` calls depending on library size. Plan for a multi-step session.
+Reads UI components (from code), extracts props/variants/states, and creates Figma component sets with variable bindings, auto-layout, and variant properties. **Typical scope:** 20-100+ `use_figma` calls — plan a multi-step session.
 
 ---
 
 ## File Flexibility
 
-This workflow adapts to the user's Figma file setup. Ask the user which scenario applies:
+Ask the user which scenario applies (only the build location differs):
 
-### Scenario A: Single file (library + screens)
-Everything lives in one Figma file. Components are created and used in the same file.
-- Build components directly in the file
-- Screens can reference components immediately
-
-### Scenario B: Separate library file
-The component library is a dedicated Figma file, published for consumption by other files. If `config.libraries[]` has entries, ask which library to build into (default: first entry).
-- Build components in the library file
-- After building, remind the user to **publish the library** so other files can use it
-- When designing screens in a different file, use `search_design_system` to find published components
-
-### Scenario C: No library yet (starting from scratch)
-The user has no existing Figma file. Create one and build the library in it.
-- Create all foundations + components in a new file
-- Offer to set up the file as a publishable library
-
-### Scenario D: Existing published library (adding components)
-A library already exists with some components. Adding new ones or updating existing ones.
-- Search the library first with `search_design_system` to inventory what exists
-- Only create what's missing or needs updating
-- Respect existing naming conventions and structure in the file
-
-The skill works identically in all scenarios — the only difference is where components are created and whether they need publishing afterward.
+- **A — Single file (library + screens):** build components directly in the file; screens reference them immediately.
+- **B — Separate library file:** build in the dedicated library file. If `config.libraries[]` has entries, ask which (default: first). After building, remind the user to **publish the library**. From other files, find components via `search_design_system`.
+- **C — No library yet:** create a new file, build all foundations + components in it, offer to make it publishable.
+- **D — Existing published library:** inventory with `search_design_system` first; only create what's missing/needs updating; respect existing naming and structure.
 
 ---
 

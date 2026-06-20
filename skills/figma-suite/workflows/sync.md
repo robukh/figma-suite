@@ -1,8 +1,6 @@
 # Workflow: Sync (the bidirectional loop)
 
-The cyclical sync between a codebase design system and Figma. Detects drift, reports it, applies changes after approval, then re-reads and updates the mapping so the agent always holds an up-to-date picture. Covers **three lanes**: tokens, components, and the component mapping itself.
-
-This is the loop the user drives by talking to the agent: edit designs/components/tokens in Figma (or in code), run `sync`, and both sides converge with the `component-mappings/` files kept current.
+The bidirectional loop between a codebase design system and Figma, across **three lanes**: tokens, components, and the component mapping itself. The user edits either side, runs `sync`, and both converge: detect drift → report → apply after approval → re-read → update the `component-mappings/` files to the new ground truth.
 
 ## Scope & direction flags
 
