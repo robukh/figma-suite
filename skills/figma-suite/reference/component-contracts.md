@@ -88,68 +88,21 @@ Component frame
 
 ### Sizing rules
 
-**Dynamic-height components** (Card, Dialog, BottomSheet, EmptyState, Toast, Input multiline) must use hug contents on the vertical axis:
-```javascript
-comp.layoutSizingVertical = "HUG";   // height adapts to content
-comp.layoutSizingHorizontal = "FIXED"; // or "HUG" for inline components
-```
+Per component type:
+- **Dynamic-height** (Card, Dialog, BottomSheet, EmptyState, Toast, Input multiline) → HUG vertical, FIXED (or HUG for inline) horizontal.
+- **Fully hug** (Button, Badge) → HUG both axes.
+- **Children that stretch** → FILL (set after `appendChild`).
 
-**Never call `resize(w, h)` on a HUG axis** — it sets FIXED and overrides hug. Only resize the FIXED axis:
-```javascript
-comp.resize(320, 1); // only width matters when vertical is HUG
-```
-
-**Fully hug components** (Button, Badge) use HUG on both axes:
-```javascript
-comp.layoutSizingHorizontal = "HUG";
-comp.layoutSizingVertical = "HUG";
-```
-
-**Children that stretch** must set FILL after being appended to their auto-layout parent:
-```javascript
-parent.appendChild(child);
-child.layoutSizingHorizontal = "FILL"; // must come AFTER appendChild
-```
+For the API mechanics (the `resize()`-before-modes ordering, FILL-after-append, the HUG-parent constraint), see [plugin-api-patterns.md § Sizing: Hug Contents vs Fixed](../reference/plugin-api-patterns.md#sizing-hug-contents-vs-fixed).
 
 ### Content slots: native SLOT (primary), INSTANCE_SWAP (fallback)
 
-Native Slots are **GA since 2026-06-10** and creatable via the Plugin API. Use a native `SLOT` for freeform content regions (Card content, BottomSheet content, Dialog footer); use INSTANCE_SWAP when you want to swap a *specific* component (icon, avatar), or as a fallback on older runtimes.
+- **Native `SLOT`** for freeform content (Card content, Dialog footer); **INSTANCE_SWAP** to swap a *specific* component (icon, avatar) or as the older-runtime fallback.
+- **Never use a raw Frame as a slot** — consumers can only fill/swap into SLOT or INSTANCE_SWAP properties.
+- For optional slots, pair with a boolean (`Show CTA`).
+- In `component-mappings/{id}.json`: native slots → `kind: "slot"`, swappable instances → `kind: "instanceSwap"`.
 
-**Native SLOT (primary):**
-
-```javascript
-// Freeform content region — closest to React `children`
-const slotNode = parent.createSlot();
-parent.appendChild(slotNode);
-slotNode.layoutSizingHorizontal = "FILL";   // after append
-parent.addComponentProperty("Content", "SLOT", slotNode.id, {});
-```
-
-**INSTANCE_SWAP (fallback / fixed swappable component):**
-
-```javascript
-// 1. Create a placeholder component
-const placeholder = figma.createComponent();
-placeholder.name = "_Slot Placeholder";
-placeholder.resize(100, 40);
-placeholder.fills = [];
-
-// 2. Instance it inside the parent
-const slot = placeholder.createInstance();
-parent.appendChild(slot);
-slot.layoutSizingHorizontal = "FILL";
-
-// 3. Register as INSTANCE_SWAP property
-parent.addComponentProperty("Content", "INSTANCE_SWAP", placeholder.id);
-```
-
-**Never use a raw Frame as a slot.** Consumers cannot fill or swap content into frames — only into SLOT or INSTANCE_SWAP properties. In the component's `component-mappings/{id}.json`, native slots map to `kind: "slot"` and swappable instances to `kind: "instanceSwap"`.
-
-For optional slots, pair with a boolean property:
-```javascript
-comp.addComponentProperty("Show CTA", "BOOLEAN", true);
-comp.addComponentProperty("CTA", "INSTANCE_SWAP", buttonComp.id);
-```
+Code for both approaches: [plugin-api-patterns.md § Content Slots](../reference/plugin-api-patterns.md#content-slots-native-slot-primary--not-empty-frames).
 
 ### Variable binding checklist
 
@@ -170,32 +123,13 @@ If no suitable variable exists for a property and creating one doesn't make sens
 
 ### Text layer: use Text Styles (MUST)
 
-**Always apply a Text Style via `setTextStyleIdAsync()`.** Individual `setBoundVariable` calls for font properties do NOT work in headless `use_figma`.
+**Always apply a Text Style via `setTextStyleIdAsync()`** — individual `setBoundVariable` font bindings do NOT work in headless `use_figma`. Build order per text layer: (1) `loadFontAsync` (probe style names first), (2) set `fontName`, (3) set `characters`, (4) `setTextStyleIdAsync(styleId)`, (5) bind the text fill color separately. Verify: `text.textStyleId` starts with `"S:"`.
 
-Sequence:
-1. `await figma.loadFontAsync({ family, style })` — load the font (probe available styles first — names vary by provider: "SemiBold" vs "Semi Bold")
-2. `text.fontName = { family, style }` — set static font (required before characters)
-3. `text.characters = "..."` — set text content
-4. `await text.setTextStyleIdAsync(styleId)` — apply Text Style
-5. Set text fill color separately (not part of Text Style):
-   ```javascript
-   const textPaint = figma.variables.setBoundVariableForPaint(
-     figma.util.solidPaint("#18181b"), "color", foregroundVar
-   );
-   text.fills = [textPaint];
-   ```
-
-To verify: `text.textStyleId` should start with `"S:"`. If it does, typography is applied via the style.
+Full sequence + font-style probing: [plugin-api-patterns.md § Text Style Application](../reference/plugin-api-patterns.md#text-style-application).
 
 ### Variable modes on components
 
-Components do NOT automatically use non-default variable modes. If you have Light/Dark modes or other variants, you MUST explicitly set the mode on each component frame:
-
-```javascript
-comp.setExplicitVariableModeForCollection(collectionId, modeId);
-```
-
-Without this call, all components render using the collection's first mode regardless of context. This is critical for dark mode variants and theme switching.
+Components do NOT auto-use non-default variable modes — call `comp.setExplicitVariableModeForCollection(collectionId, modeId)` on each frame, or all variants render in the collection's first mode (breaks dark mode / theming). See [plugin-api-patterns.md § Variable Modes on Components](../reference/plugin-api-patterns.md#variable-modes-on-components).
 
 ---
 
@@ -271,21 +205,7 @@ These are generic patterns. The actual component names and structures are projec
 
 ## Component Property Keys
 
-**Property names are NOT simple strings.** TEXT, BOOLEAN, and INSTANCE_SWAP properties have a `#uid` suffix (e.g., `"Label#4:0"`, `"Show Icon#2:33"`). Only VARIANT properties are plain names (e.g., `"Size"`).
-
-- **Always capture the return value** from `addComponentProperty()` — it returns the full key with suffix
-- **Never hardcode or guess keys** — inspect `componentPropertyDefinitions` to discover them
-- **Using the wrong key produces silent failures** — the property appears to exist but isn't linked
-
-```javascript
-// Discover existing property keys
-const propDefs = comp.componentPropertyDefinitions;
-for (const [key, def] of Object.entries(propDefs)) {
-  // key = "Label#4:0", def.type = "TEXT"
-  // key = "Show Icon#2:33", def.type = "BOOLEAN"
-  // key = "Size", def.type = "VARIANT" (no suffix)
-}
-```
+TEXT/BOOLEAN/INSTANCE_SWAP property keys carry a volatile `#uid` suffix (`"Label#4:0"`); only VARIANT keys are plain (`"Size"`). **Always capture the return value from `addComponentProperty()`** and never hardcode/guess a key — the wrong key is a silent failure. Discover existing keys via `componentPropertyDefinitions`. Full detail + the re-run-duplicate gotcha: [plugin-api-patterns.md § Component Property Keys Are Dynamic](../reference/plugin-api-patterns.md#component-property-keys-are-dynamic).
 
 ---
 

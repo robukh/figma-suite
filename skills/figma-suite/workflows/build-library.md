@@ -119,12 +119,7 @@ Parent components that contain nested instances must use **Hug Contents** sizing
 | Dialog with variable body text | Hug Contents (vertical) | Grows with content |
 | Fixed-height input/button | Fixed height, Fill (horizontal) | Height is a design token, width fills parent |
 
-**Rules:**
-- Default to **Hug Contents** on both axes unless the component has a fixed dimension from a design token (e.g., button height)
-- When a boolean property hides a child, the parent must automatically collapse the gap — this only works with Hug Contents + auto-layout
-- When a child instance is swapped for a different variant (bigger icon, different button size), the parent must resize — Hug Contents ensures this
-- Only use **Fill Container** when the component should stretch to its parent's width (e.g., full-width buttons, inputs in forms)
-- Only use **Fixed** when a dimension comes from a design token (e.g., a button height defined by a spacing variable)
+**Why it matters for builds:** when a boolean hides a child or a child is swapped for a different variant, the parent must collapse/resize — only Hug Contents + auto-layout does this. Default Hug both axes; Fill only for parent-width stretch; Fixed only when a token defines the dimension. API mechanics: [plugin-api-patterns.md § Sizing](../reference/plugin-api-patterns.md#sizing-hug-contents-vs-fixed).
 
 ### Component Properties — Full Utilization
 
@@ -153,16 +148,7 @@ When component A nests component B, expose B's most-used properties through A:
 
 ### Build Order
 
-Components must be built in dependency order — primitives before composites:
-
-```
-Tier 1 (no dependencies):  Components with no library dependencies (e.g., icons, badges, switches)
-Tier 2 (uses Tier 1):      Components that nest Tier 1 (e.g., buttons with icons, inputs)
-Tier 3 (uses Tier 1-2):    Containers that nest Tier 1-2 (e.g., cards, list rows, toasts)
-Tier 4 (uses Tier 1-3):    Overlays and shells that nest everything (e.g., dialogs, navigation)
-```
-
-Assign tiers based on the actual dependency graph discovered during Phase 0. Never build a higher-tier component before its dependencies exist.
+Build in dependency order — primitives before composites. Tier definitions (1: primitives → 4: overlays): [component-contracts.md § Build order](../reference/component-contracts.md#build-order). Assign tiers from the dependency graph discovered in Phase 0; never build a higher-tier component before its dependencies exist.
 
 ---
 
@@ -230,35 +216,18 @@ In a separate `use_figma` call, for **every** text layer created in 2c:
 2. Apply it: `await textNode.setTextStyleIdAsync(styleId)`
 3. If no matching text style exists, set raw font properties and add to exceptions list
 
-**Do not skip any text layer.** Every text node must have either a text style applied or an explicit exception logged.
-
-**Do NOT use `setBoundVariable` for `fontSize`, `fontWeight`, or `lineHeight`** — these font properties are not bindable via the Plugin API. Typography MUST be applied through Text Styles. If `TextStyle.setBoundVariable` is needed for variable binding on the style itself, it must be done interactively in the Figma UI (it throws "not a function" in headless `use_figma`).
+**Do not skip any text layer** — each gets a text style or a logged exception. **Never `setBoundVariable` for `fontSize`/`fontWeight`/`lineHeight`** (not bindable; use Text Styles). See [plugin-api-patterns.md § Text Style Application](../reference/plugin-api-patterns.md#text-style-application).
 
 #### Step 2e: Bind color variables
 
-In a separate `use_figma` call, bind fills, strokes, and text fills:
+In a separate `use_figma` call, bind fills, strokes, and text fills via `setBoundVariableForPaint`:
 
 ```javascript
-// Frame/shape fills
-const bgPaint = figma.variables.setBoundVariableForPaint(
-  figma.util.solidPaint("#ffffff"), "color", bgVar
-);
-node.fills = [bgPaint];
-
-// Text fills (every text layer)
-const textPaint = figma.variables.setBoundVariableForPaint(
-  figma.util.solidPaint("#18181b"), "color", fgVar
-);
-textNode.fills = [textPaint];
-
-// Strokes (if applicable)
-const strokePaint = figma.variables.setBoundVariableForPaint(
-  figma.util.solidPaint("#e4e4e7"), "color", borderVar
-);
-node.strokes = [strokePaint];
+const paint = figma.variables.setBoundVariableForPaint(figma.util.solidPaint("#ffffff"), "color", bgVar);
+node.fills = [paint];   // same pattern for textNode.fills and node.strokes
 ```
 
-Walk **every** node with a fill or stroke and bind it. If a color doesn't map to any existing variable (e.g., a gradient, an image fill, or a one-off decorative color), keep the raw value and add to exceptions list.
+Walk **every** node with a fill or stroke. For a tinted fill, re-apply `opacity` AFTER binding (it gets dropped). Gradients/images/one-off decorative colors → keep raw, log exception. Full patterns + the opacity gotcha: [plugin-api-patterns.md § Variable Binding on Paints](../reference/plugin-api-patterns.md#variable-binding-on-paints-fills-and-strokes).
 
 #### Step 2f: Add component properties
 
@@ -300,21 +269,9 @@ Then, for each remaining combination of variant axes:
 2. Rebind **only what differs** for that variant (e.g. the tone color, the size tokens) — everything else carries over from the verified template
 3. Name using `Property=Value` format: `variant=primary, size=md`
 4. Combine all variants into a component set using `combineAsVariants`
-5. **Layout variants in a grid after combining** — all children stack at (0,0). Position them and resize the ComponentSet:
-   ```javascript
-   cs.children.forEach((child, i) => {
-     child.x = (i % 4) * colWidth;
-     child.y = Math.floor(i / 4) * rowHeight;
-   });
-   let maxX = 0, maxY = 0;
-   for (const child of cs.children) {
-     maxX = Math.max(maxX, child.x + child.width);
-     maxY = Math.max(maxY, child.y + child.height);
-   }
-   cs.resizeWithoutConstraints(maxX + 40, maxY + 40);
-   ```
+5. **Layout variants in a grid after combining** — all children stack at (0,0); position them and `resizeWithoutConstraints` the set. Grid code: [plugin-api-patterns.md § Variant Layout](../reference/plugin-api-patterns.md#variant-layout-after-combineasvariants).
 
-**Note:** Component properties MUST be added in Step 2f (before combining). After combining, the component set inherits all properties from its children. Do NOT add properties to the `ComponentSetNode` directly.
+**Note:** Component properties MUST be added in Step 2f (before combining). After combining, the set inherits all properties from its children. Do NOT add properties to the `ComponentSetNode` directly.
 
 ### Step 4: Screenshot and validate
 

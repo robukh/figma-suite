@@ -4,28 +4,7 @@ These rules encode correct Plugin API usage patterns for `use_figma` MCP calls. 
 
 Based on the [official Figma MCP server guide](https://github.com/figma/mcp-server-guide/tree/main/skills/figma-use).
 
----
-
-## Pre-Flight Checklist
-
-Verify **before every** `use_figma` call:
-
-- [ ] Code uses `return` to send data back (NOT `console.log()` or `figma.closePlugin()`)
-- [ ] Code is NOT wrapped in an async IIFE (auto-wrapped for you)
-- [ ] `return` value includes ALL created/mutated node IDs
-- [ ] No usage of `figma.notify()` (throws "not implemented")
-- [ ] No usage of `getPluginData()`/`setPluginData()` (not supported — use `getSharedPluginData()`)
-- [ ] All colors use 0–1 range (not 0–255)
-- [ ] Fills/strokes are reassigned as new arrays (not mutated in place)
-- [ ] Page switches use `await figma.setCurrentPageAsync(page)` (sync setter throws)
-- [ ] `layoutSizingVertical/Horizontal = 'FILL'` is set AFTER `parent.appendChild(child)`
-- [ ] `loadFontAsync()` called BEFORE any text property changes
-- [ ] `lineHeight`/`letterSpacing` use `{value, unit}` format (not bare numbers)
-- [ ] `resize()` is called BEFORE setting sizing modes (resize resets them to FIXED)
-- [ ] New top-level nodes are positioned away from (0,0)
-- [ ] ALL created/mutated node IDs are collected and returned
-- [ ] Every async call is `await`ed — no fire-and-forget Promises
-- [ ] Variable `scopes` are set explicitly (not left as `ALL_SCOPES`)
+The terse master list of every constraint is **[Known API Constraints](#known-api-constraints)** at the bottom — scan it before each `use_figma` call. The sections below explain each in full.
 
 ---
 
@@ -498,7 +477,11 @@ for (const child of btnSet.children) {
 
 ## Content Slots: native SLOT (primary) — NOT empty frames
 
-**Content slots must be real component properties, not empty frames.** As of the Slots GA release (2026-06-10), prefer the native `SLOT` type; fall back to INSTANCE_SWAP only on older runtimes or when a fixed swappable component (icon, avatar) is what you actually want.
+**Content slots must be real component properties, not empty frames.** Native **Slots** are GA as of 2026-06-10 (`createSlot()` → `SlotNode`; `addComponentProperty(name, "SLOT", defaultValue, { slotSettings })`).
+
+**Decision guide:**
+- **Native `SLOT`** — freeform content regions (Card content, Dialog body, BottomSheet content). Closest to React `children`. Use by default.
+- **`INSTANCE_SWAP`** — swap a *specific* component (icon, avatar, a chosen button). Also the fallback on older runtimes.
 
 ### Native SLOT (primary)
 
@@ -571,21 +554,6 @@ const parent = stableFrame.findOne(n => n.name === "ParentName");
 
 ---
 
-## Slots vs INSTANCE_SWAP (now both available)
-
-Figma's native **Slots** are **GA as of 2026-06-10** and fully creatable via the Plugin API:
-- `ComponentNode.createSlot()` returns a `SlotNode`
-- `addComponentProperty(name, "SLOT", defaultValue, { slotSettings })` accepts the `"SLOT"` type
-- `ComponentPropertyOptions.slotSettings` configures slot behavior
-
-**Decision guide:**
-- **Native `SLOT`** — freeform content regions (Card content, Dialog body, BottomSheet content). Closest to React `children`. Use this by default.
-- **`INSTANCE_SWAP`** — swapping a specific component variant (icon, avatar, a chosen button). Also the fallback on older Figma runtimes.
-
-*(Last verified: 2026-06-10 — Figma Slots GA release)*
-
----
-
 ## Safe Property Access in Audits
 
 When reading `boundVariables`, `fills`, `strokes`, or other mixed-type properties, some values may be Symbols or unexpected types:
@@ -602,6 +570,15 @@ if (typeof variant.topLeftRadius === "number" && variant.topLeftRadius > 0) { ..
 
 ## Known API Constraints
 
+The master pre-flight list — scan before every `use_figma` call. Each is explained in full in the sections above.
+
+- Use `return` to send data back (NOT `console.log()` or `figma.closePlugin()`) — and `return` ALL created/mutated node IDs
+- Do NOT wrap code in an async IIFE — it is auto-wrapped for you
+- `await` every async call — no fire-and-forget Promises
+- Colors use 0–1 range (not 0–255)
+- Fills/strokes are reassigned as new arrays — never mutated in place
+- Page switches use `await figma.setCurrentPageAsync(page)` — the sync setter throws
+- Position new top-level nodes away from (0,0) — they stack otherwise
 - `letter-spacing` cannot be bound to variables — apply as raw value
 - `combineAsVariants` needs manual grid layout — variants stack at (0,0)
 - `combineAsVariants` requires `ComponentNode` inputs — not frames
