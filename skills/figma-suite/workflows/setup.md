@@ -18,7 +18,10 @@ Generated files go to one of two locations, chosen by the user during setup:
 ├── code-rules.md
 ├── token-map.generated.md
 ├── component-contracts.generated.md
-└── component-mapping.json
+└── component-mappings/          # one {id}.json per component (+ optional _meta.json)
+    ├── _meta.json
+    ├── button.json
+    └── …
 ```
 
 **Global** (default when standalone, optional when inside a codebase):
@@ -29,7 +32,10 @@ Generated files go to one of two locations, chosen by the user during setup:
 ├── code-rules.md
 ├── token-map.generated.md
 ├── component-contracts.generated.md
-└── component-mapping.json
+└── component-mappings/          # one {id}.json per component (+ optional _meta.json)
+    ├── _meta.json
+    ├── button.json
+    └── …
 ```
 
 See [config-schema.md](../reference/config-schema.md) for the full config structure.
@@ -299,19 +305,19 @@ Write to the appropriate location (project-local or global workspace):
 
 - **token-map.generated.md** — every token mapped to its Figma variable name, collection, mode, type, scopes
 - **component-contracts.generated.md** — every component with props, variants, tokens, dependencies, build tier
-- **component-mapping.json** — the relationship between code and Figma components, with property- and value-level mapping (see below)
+- **component-mappings/** — one `{id}.json` per component, capturing the relationship between code and Figma components with property- and value-level mapping (see below)
 
-### Component Mapping (`component-mapping.json`)
+### Component Mapping (`component-mappings/`)
 
-Code and Figma components rarely have a perfect 1:1 match. This file tracks the real relationship, intentional differences, and — critically — how each code prop maps to each Figma property and how their *values* translate (e.g. code `style="primary"` ↔ Figma `Type=Primary`).
+Code and Figma components rarely have a perfect 1:1 match. The mapping tracks the real relationship, intentional differences, and — critically — how each code prop maps to each Figma property and how their *values* translate (e.g. code `style="primary"` ↔ Figma `Type=Primary`).
 
-**This is a JSON file validated by a Zod schema.** Do not hand-write a markdown table. Follow [mapping-schema.md](../reference/mapping-schema.md) exactly for the structure, examples, validation, and the Code Connect bridge.
+**This is a directory of JSON files validated by a Zod schema** — one `component-mappings/{id}.json` per component, each a standalone `ComponentEntry` named after its `id` slug. Do not hand-write a markdown table. Follow [mapping-schema.md](../reference/mapping-schema.md) exactly for the structure, examples, validation, filename==id rule, and the Code Connect bridge.
 
 Each entry has a **status**: `matched` | `code-only` | `figma-only` | `split` | `merged` | `diverged` (definitions in [mapping-schema.md](../reference/mapping-schema.md)).
 
 **How setup populates it:**
 
-1. **Seed entries by name-matching** code components (Phase 1) against Figma components (Phase 1b). Exact/normalized name match → `matched`; code with no Figma match → `code-only`; Figma with no code match → `figma-only`.
+1. **Seed one file per component by name-matching** code components (Phase 1) against Figma components (Phase 1b). Exact/normalized name match → `matched`; code with no Figma match → `code-only`; Figma with no code match → `figma-only`. Write each to `component-mappings/{id}.json` (filename == `id`).
 2. **Build each `propertyMap`** by pairing the code component's props with the Figma component's properties:
    - code union prop ↔ Figma VARIANT → `kind: "enum"`, fill `values` with `figmaValue → codeValue` for every variant value
    - code boolean ↔ Figma BOOLEAN → `kind: "boolean"`
@@ -320,12 +326,13 @@ Each entry has a **status**: `matched` | `code-only` | `figma-only` | `split` | 
    - code children/content ↔ Figma SLOT → `kind: "slot"`
    - Store **base** Figma property names only (no `#uid` suffix).
 3. **Mark `published`** on each Figma side from the scan (gates the optional Code Connect bridge).
-4. **Validate** the result against the Zod schema by inspection before writing. Optionally run `node skills/figma-suite/schema/validate.mjs <workspace>/component-mapping.json` for a hard check.
+4. **Write `_meta.json`** once with `version: 1` and the current ISO 8601 `generatedAt`.
+5. **Validate** each file against the Zod schema by inspection before writing (status invariants, filename == `id`, no duplicate `id`s). Optionally run `node skills/figma-suite/schema/validate.mjs <workspace>/component-mappings/` for a hard check of the whole directory.
 
-**This file is user-editable.** Setup auto-generates initial entries; the user (or Claude during `sync`/audit) refines statuses, value maps, and notes over time. Re-running setup preserves manual edits and only adds newly discovered components.
+**These files are user-editable.** Setup auto-generates initial files; the user (or Claude during `sync`/audit) refines statuses, value maps, and notes over time. **Re-running setup only writes NEW `{id}.json` files — it never touches an existing file**, so manual edits and hand-tuned value maps are preserved automatically. (If a stray legacy single `component-mapping.json` exists alongside `component-mappings/`, ignore it and note it for the user — never read both.)
 
 The mapping is used by:
-- **sync** — diffs live Figma properties/values and code props against `propertyMap`; updates the JSON to the new ground truth at the end of every loop
+- **sync** — diffs live Figma properties/values and code props against `propertyMap`; updates the per-component files to the new ground truth at the end of every loop
 - **build-library** — skips `code-only` and `figma-only` entries, handles `split`/`merged` correctly
 - **audit** — checks `matched` pairs for drift, ignores `diverged` with documented reason
 - **design** — knows which Figma components to use, and which value to set per code value, regardless of code structure
@@ -379,7 +386,7 @@ Generation process:
 1. **Detect the styling system** — Tailwind, CSS modules, styled-components, vanilla CSS (from Phase 1 component scan + framework detection)
 2. **Detect the canonical token format** — whichever token source was discovered (DTF, CSS vars, Tailwind, etc.); record how tokens are referenced in code (`var(--token)`, theme object, Tailwind class)
 3. **Detect component conventions** — directory, file naming, export style, prop-naming case (from the naming preset and the scanned components)
-4. **Generate `code-rules.md`** with concrete, project-specific defaults — see the "Code Rules File" format in [config-schema.md](../reference/config-schema.md). Always include the **Component mapping** section instructing the agent to consult `component-mapping.json` and translate values via `propertyMap.values`.
+4. **Generate `code-rules.md`** with concrete, project-specific defaults — see the "Code Rules File" format in [config-schema.md](../reference/config-schema.md). Always include the **Component mapping** section instructing the agent to consult the relevant `component-mappings/{id}.json` and translate values via `propertyMap.values`.
 
 Present it for review the same way as the design rules. The user can edit it at any time; the code-facing paths read it before operating.
 
@@ -404,11 +411,11 @@ Present it for review the same way as the design rules. The user can edit it at 
 - [code-rules path]
 - [token-map path]
 - [component-contracts path]
-- [component-mapping.json path]
+- [component-mappings/ path] ([N] component files + _meta.json)
 
 ### Next steps
 1. Review and edit your rules: [workspace-path]/design-rules.md and [workspace-path]/code-rules.md
-2. Review the component mapping: [workspace-path]/component-mapping.json
+2. Review the component mapping: [workspace-path]/component-mappings/
 3. Run `/figma-suite sync` for the full bidirectional loop (tokens + components + mapping)
 4. Run `/figma-suite build-library` to create components
 ```
@@ -421,10 +428,10 @@ Running `/figma-suite setup` again will:
 1. Re-scan the project (or Figma files) for changes
 2. Show a diff of what changed since last setup
 3. Update the generated files after approval
-4. Never overwrite manual edits to config, rules files, or `component-mapping.json` — only add newly discovered paths and components
+4. Never overwrite manual edits to config, rules files, or existing `component-mappings/{id}.json` files — only add newly discovered paths and components
 5. Offer to add new library or design file URLs
 6. Offer to regenerate design rules and code rules (with option to preserve manual edits)
-7. Merge newly discovered components into `component-mapping.json` without clobbering existing entries or hand-tuned `propertyMap` value maps
+7. Add newly discovered components as new `component-mappings/{id}.json` files — never rewrite an existing file (this is automatic per-file; hand-tuned `propertyMap` value maps are preserved). Bump `_meta.json.generatedAt`.
 
 ---
 

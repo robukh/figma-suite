@@ -143,7 +143,7 @@ slot.layoutSizingHorizontal = "FILL";
 parent.addComponentProperty("Content", "INSTANCE_SWAP", placeholder.id);
 ```
 
-**Never use a raw Frame as a slot.** Consumers cannot fill or swap content into frames — only into SLOT or INSTANCE_SWAP properties. In `component-mapping.json`, native slots map to `kind: "slot"` and swappable instances to `kind: "instanceSwap"`.
+**Never use a raw Frame as a slot.** Consumers cannot fill or swap content into frames — only into SLOT or INSTANCE_SWAP properties. In the component's `component-mappings/{id}.json`, native slots map to `kind: "slot"` and swappable instances to `kind: "instanceSwap"`.
 
 For optional slots, pair with a boolean property:
 ```javascript

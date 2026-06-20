@@ -108,7 +108,7 @@ Set up the Figma file organization based on the `config.fileLayout` preset chose
 
 These rules are mandatory for every component created in Figma. Violations fail QA.
 
-All universal component rules from SKILL.md apply here (Zero Raw Values, Text Styles, Component Composition, Hug Contents, Build Order). Below are the **build-library-specific details** that expand on those rules.
+The **why** behind every rule (and what a senior rejects) lives once in [design-judgment.md](../reference/design-judgment.md) — read it before building. The universal mandates live in [SKILL.md "Component Creation Rules"](../SKILL.md#component-creation-rules) (No Silent Skipping, Zero Raw Values, Text Styles, Component Composition, Hug Contents, Build Order). This section adds only the **build-library-specific operational detail** — the binding-reference table, sizing matrix, and property-utilization table — not restated rationale.
 
 ### Zero Raw Values — Binding Reference
 
@@ -164,7 +164,7 @@ Every component must expose the right properties so consumers can customize with
 - Use a **native `SLOT`** for freeform content regions (Card content, Dialog body) — closest to React `children`. Use **INSTANCE_SWAP** to swap a specific component (icon, avatar), or as a fallback on older runtimes.
 - For instance swap: set a sensible **default instance** (the most common variant) and use **preferred values** to constrain which components can be swapped in
 - For optional slots/swaps, pair with a boolean property: `Show Icon` controls visibility, `Icon` controls which icon
-- Map native slots to `kind: "slot"` and swappable instances to `kind: "instanceSwap"` in `component-mapping.json`
+- Map native slots to `kind: "slot"` and swappable instances to `kind: "instanceSwap"` in the component's `component-mappings/{id}.json`
 
 **Exposed nested properties:**
 When component A nests component B, expose B's most-used properties through A:
@@ -314,9 +314,11 @@ If there are zero exceptions, report that all properties are fully bound and exp
 
 ### Step 3: Build variant matrix
 
-For each combination of variant axes:
-1. Duplicate the base component
-2. Override the bound variables for that variant (different fill colors, sizes, etc.)
+**Before cloning: finish and verify ONE canonical variant.** Steps 2a–2f build a single variant — confirm it is 100% complete (all paint *and* dimensional bindings, text styles, nested instances, and component properties) and **run the verification script against it** (Step 5) before you propagate it. Cloning an incomplete variant multiplies every omission across the whole set: one missing binding becomes N missing bindings. Also keep the matrix small — promote an axis to a *variant property* only when it changes anatomy/visual treatment; toggles and content go to boolean/text/swap, which don't multiply the count (see [design-judgment.md §3](../reference/design-judgment.md#3-variant-set-design)).
+
+Then, for each remaining combination of variant axes:
+1. **`clone()`** the verified canonical component (don't rebuild from scratch)
+2. Rebind **only what differs** for that variant (e.g. the tone color, the size tokens) — everything else carries over from the verified template
 3. Name using `Property=Value` format: `variant=primary, size=md`
 4. Combine all variants into a component set using `combineAsVariants`
 5. **Layout variants in a grid after combining** — all children stack at (0,0). Position them and resize the ComponentSet:
@@ -353,6 +355,26 @@ Run the verification script from [component-contracts.md](../reference/component
 - **Exceptions** — properties intentionally left raw/unexposed (from Step 2g). Report to user.
 
 If violations exist, fix them and re-run verification. Do NOT proceed to the next component until violations are zero.
+
+**Report evidence, not a claim — output a verification table.** A screenshot proves it looks right, not that it's bound right. After the script passes, render a table with one row per rule and its **actual value**, so the user can see exactly what was applied without having to ask:
+
+```markdown
+### Verification — Button / variant=primary, size=md
+| Rule | Status | Actual value |
+|------|--------|--------------|
+| Fill variable-bound | PASS | `Semantic/action-primary` |
+| Text fill variable-bound | PASS | `Semantic/on-action` |
+| Padding (4 sides) bound | PASS | `Spacing/spacing-3` (TB), `Spacing/spacing-4` (LR) |
+| Gap bound | PASS | `Spacing/gap-inline` |
+| Radius (4 corners) bound | PASS | `Spacing/radius-md` |
+| Text Style applied | PASS | `S:` → `Body / Medium` |
+| Label TEXT property | PASS | `Label#4:0` → "Button" |
+| Icon INSTANCE_SWAP | PASS | `Icon#5:1` → `Icons/Chevron` |
+
+Exceptions (1): separator fill — decorative, single-use color (not bound).
+```
+
+Include this table in the per-component report. A green script plus a clean pass on the [design-judgment.md §6 quality bar](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list) is the senior bar.
 
 ### Step 6: Annotate
 

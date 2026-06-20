@@ -286,6 +286,19 @@ const strokePaint = figma.variables.setBoundVariableForPaint(
 node.strokes = [strokePaint];
 ```
 
+**GOTCHA: `setBoundVariableForPaint` returns a NEW paint and DROPS the input paint's `opacity` field.** For a tinted fill (a tone color at, say, 10% — alert backgrounds, hover states, scrims), set `opacity` AFTER binding, then reassign. Binding first wipes it:
+
+```javascript
+// Tinted fill: danger tone @ 10%
+let paint = figma.variables.setBoundVariableForPaint(
+  figma.util.solidPaint("#e7000b"), "color", dangerVar
+);
+paint = { ...paint, opacity: 0.1 };   // ← re-apply on the RETURNED paint; binding wiped it
+node.fills = [paint];
+```
+
+Forgetting this produces a solid color block instead of a tint — a common, hard-to-spot bug because the binding itself succeeds.
+
 **Fills/strokes are read-only arrays** — clone, modify, reassign:
 ```javascript
 // WRONG — mutation has no effect
@@ -294,6 +307,37 @@ node.fills[0].color = { r: 1, g: 0, b: 0 };
 // CORRECT — reassign entire array
 node.fills = [{ type: "SOLID", color: { r: 1, g: 0, b: 0 } }];
 ```
+
+---
+
+## Binding Dimensional Variables (padding / gap / radius)
+
+Color binds on the *paint* (above). Dimensional values (padding, gap, radius) bind on the **node**
+via `setBoundVariable` — a different API surface. Float variables only.
+
+```javascript
+// Padding — bind each side individually (there is no shorthand)
+node.setBoundVariable("paddingLeft", spacing4Var);
+node.setBoundVariable("paddingRight", spacing4Var);
+node.setBoundVariable("paddingTop", spacing3Var);
+node.setBoundVariable("paddingBottom", spacing3Var);
+
+// Gap (auto-layout)
+node.setBoundVariable("itemSpacing", spacing3Var);
+```
+
+**Radius is per-corner — `cornerRadius` is NOT bindable.** The `cornerRadius` shorthand looks
+bindable but isn't; bind the four corner properties individually:
+
+```javascript
+node.setBoundVariable("topLeftRadius", radiusXlVar);
+node.setBoundVariable("topRightRadius", radiusXlVar);
+node.setBoundVariable("bottomLeftRadius", radiusXlVar);
+node.setBoundVariable("bottomRightRadius", radiusXlVar);
+```
+
+This is the API reference. The *rule* to bind every dimensional property (and to pick the
+semantically-correct spacing token, not just the pixel match) lives in [component-contracts.md](component-contracts.md#variable-binding-checklist) and [design-judgment.md §1](design-judgment.md#1-token-judgment).
 
 ---
 
@@ -388,6 +432,23 @@ iconInstance.componentPropertyReferences = {
 
 **Add component properties BEFORE `combineAsVariants`.** After combining, the component set inherits all properties from its children.
 
+### Re-running `addComponentProperty` after an interruption creates a duplicate
+
+If an `addComponentProperty` call is interrupted or partially applied and you re-run it, Figma does **not** overwrite — it auto-suffixes a duplicate (`"Label"` → `"Label2"`). You end up with an orphan property the consumer sees and a linked one that works (or vice versa).
+
+**After any interrupted property-adding call, inspect and clean up before re-adding:**
+
+```javascript
+// Discover what's actually there
+const defs = comp.componentPropertyDefinitions;
+// e.g. { "Label#4:0": {...}, "Label2#7:1": {...} }  ← the 2nd is an orphan
+
+// Delete the orphan, then re-add cleanly
+comp.deleteComponentProperty("Label2#7:1");
+```
+
+Never blindly re-run `addComponentProperty` after a failure — inspect `componentPropertyDefinitions` first.
+
 ---
 
 ## Variant Layout After `combineAsVariants`
@@ -431,7 +492,7 @@ for (const child of btnSet.children) {
 // Property definition auto-updates to match
 ```
 
-`editComponentProperty` may fail in some cases. Renaming children directly is the reliable approach.
+**Scope note:** `editComponentProperty` **works** for TEXT and BOOLEAN property name edits — use it freely there. It's specifically **variant**-property renames that are fragile (Figma validates variant names against the current property keys), so for those, rename the variant children directly as shown above rather than calling `editComponentProperty`.
 
 ---
 
@@ -452,7 +513,7 @@ slotNode.layoutSizingHorizontal = "FILL";    // after append
 const slotKey = comp.addComponentProperty("Content", "SLOT", slotNode.id, {});
 ```
 
-Consumers can drop any content into a native slot — closer to the React `children` model than INSTANCE_SWAP. Map these to `kind: "slot"` in `component-mapping.json`.
+Consumers can drop any content into a native slot — closer to the React `children` model than INSTANCE_SWAP. Map these to `kind: "slot"` in the component's `component-mappings/{id}.json`.
 
 ### INSTANCE_SWAP (fallback / fixed swappable component)
 
@@ -479,7 +540,7 @@ slot.componentPropertyReferences = { mainComponent: slotKey };
 
 ## Component Composition via Instances
 
-**Composite components MUST nest instances of already-built components.** Never rebuild a component from scratch when it already exists.
+**Composite components MUST nest instances of already-built components.** Never rebuild a component from scratch when it already exists — and that includes icons: instance an existing icon component, never draw a glyph or hand-vector one that already exists. See [design-judgment.md §2](design-judgment.md#2-component-anatomy) and [§5](design-judgment.md#5-iconography) for the craft behind reuse.
 
 ```javascript
 const buttonComponent = await figma.getNodeByIdAsync("BUTTON_ID");
@@ -551,6 +612,9 @@ if (typeof variant.topLeftRadius === "number" && variant.topLeftRadius > 0) { ..
 - Font loading (`loadFontAsync`) must happen BEFORE setting `fontName` or `characters`
 - `editComponentProperty` for variant properties may fail — rename children directly
 - `setBoundVariable` on fills/strokes must use `setBoundVariableForPaint`
+- `setBoundVariableForPaint` DROPS the input paint's `opacity` — re-apply it on the returned paint (`paint = { ...paint, opacity }`) for tinted fills
+- `cornerRadius` shorthand is NOT bindable — bind `topLeftRadius`/`topRightRadius`/`bottomLeftRadius`/`bottomRightRadius` individually
+- Re-running `addComponentProperty` after an interrupted call auto-suffixes a duplicate (`Label2`) — inspect `componentPropertyDefinitions` and `deleteComponentProperty` orphans before re-adding
 - `setBoundVariable` on TextStyle objects does NOT work in headless `use_figma`
 - `fontSize`, `fontWeight`, `lineHeight` are NOT bindable via `setBoundVariable` on text nodes — use Text Styles
 - Component property keys have `#uid` suffixes (e.g., `"Label#4:0"`) — never hardcode, always capture from `addComponentProperty`

@@ -205,7 +205,7 @@ During setup, after scanning the codebase: detect the styling system, token form
 # Code Rules — {Project Name}
 
 ## Component mapping
-- Always consult component-mapping.json before generating code from a Figma node.
+- Always consult the component's component-mappings/{id}.json before generating code from a Figma node.
 - Translate Figma property values to code values via propertyMap.values (figmaValue → codeValue).
 - For figma-only components, do not invent code; flag them. For code-only, never expect a Figma node.
 
@@ -233,7 +233,7 @@ During setup, after scanning the codebase: detect the styling system, token form
 
 ### Fallback behavior
 
-If no code rules file exists, workflows should apply general best practices: follow the existing codebase conventions, use the project's canonical token format, never hardcode values that exist as tokens, and consult `component-mapping.json` for the code↔Figma correspondence.
+If no code rules file exists, workflows should apply general best practices: follow the existing codebase conventions, use the project's canonical token format, never hardcode values that exist as tokens, and consult the relevant `component-mappings/{id}.json` for the code↔Figma correspondence.
 
 ---
 
@@ -249,7 +249,10 @@ The workspace can live in one of two locations, chosen during setup:
 ├── code-rules.md                          # Rules for writing code from Figma (user-editable)
 ├── token-map.generated.md                 # Library tokens → Figma variables
 ├── component-contracts.generated.md       # Library components → Figma component sets
-└── component-mapping.json                 # Code ↔ Figma component + property/value mapping
+└── component-mappings/                     # Code ↔ Figma mapping — one {id}.json per component
+    ├── _meta.json                          # schema version + last-generation timestamp (optional)
+    ├── button.json
+    └── …
 ```
 
 **Global** (`workspaceLocation: "global"`):
@@ -260,9 +263,12 @@ The workspace can live in one of two locations, chosen during setup:
 ├── code-rules.md
 ├── token-map.generated.md
 ├── component-contracts.generated.md
-└── component-mapping.json
+└── component-mappings/
+    ├── _meta.json
+    ├── button.json
+    └── …
 ```
 
-`component-mapping.json` is the machine-readable code↔Figma mapping (statuses, plus property- and value-level mapping). It is Zod-validated — see [mapping-schema.md](mapping-schema.md) for the schema, examples, validation, and the Code Connect bridge.
+`component-mappings/` holds the machine-readable code↔Figma mapping — one standalone `{id}.json` per component (statuses, plus property- and value-level mapping), named after its `id` slug. Each is Zod-validated — see [mapping-schema.md](mapping-schema.md) for the schema, examples, validation, the filename==id rule, and the Code Connect bridge.
 
 Project-level is default when inside a codebase. Global is default (and the only option) for standalone mode. The folder is named `{project-name}` (kebab-cased from `config.name`). If two global projects share a name, append a short hash.

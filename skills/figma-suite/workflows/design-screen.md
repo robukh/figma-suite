@@ -149,7 +149,7 @@ When designing a flow (e.g., onboarding, checkout):
 
 ## Design Rules
 
-All universal component rules from SKILL.md apply (Zero Raw Values, Text Styles, Component Composition, Hug Contents). For Plugin API details, see [plugin-api-patterns.md](../reference/plugin-api-patterns.md).
+The craft behind good screens — token choice, visual hierarchy, spacing rhythm, composition, iconography, and the master red-flag list — lives once in [design-judgment.md](../reference/design-judgment.md). **Read it before composing a screen.** The universal component mandates are in [SKILL.md "Component Creation Rules"](../SKILL.md#component-creation-rules); Plugin API details in [plugin-api-patterns.md](../reference/plugin-api-patterns.md). Below are only the screen-workflow-specific applications.
 
 ### Project-specific rules
 
@@ -163,8 +163,12 @@ If no design rules file exists, infer sensible defaults from the library's varia
 
 ### Screen-specific rules
 
-- **Typography hierarchy** — each screen should use at most 3-4 text sizes. Follow the project's typography scale.
-- **Content-first** — use realistic content, not "Lorem ipsum". Use domain-appropriate copy that matches the project's purpose. If specs or wireframes exist, pull actual copy from them.
+Apply [design-judgment.md §4 (Visual Hierarchy & Composition)](../reference/design-judgment.md#4-visual-hierarchy--composition) to every screen. The two that bite most often on screens:
+
+- **Typography hierarchy** — at most 3–4 text sizes per screen, all from the type scale (role-named Text Styles, never ad-hoc `15px`).
+- **Content-first** — realistic, domain-appropriate copy, never "Lorem ipsum". Pull actual copy from specs/wireframes when they exist.
+
+Then check the screen against the [§6 quality bar](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list) before declaring it done.
 
 ---
 

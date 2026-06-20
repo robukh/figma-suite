@@ -29,29 +29,42 @@ The user can audit:
 
 ## Phase 1: Inspect
 
+The audit scores against the master red-flag list in [design-judgment.md §6 (The Quality Bar)](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list). That table (rows #1–#12) is the shared vocabulary — every finding below maps to a row, and findings should **cite the row number** (e.g. "red flag #5: text-as-icon"). The checklist below is how to detect them.
+
 For each frame/element in the audit target, check:
 
 ### Token compliance
-- [ ] **Fill colors** — bound to a variable, or hardcoded hex?
-- [ ] **Stroke colors** — bound to a variable?
-- [ ] **Text colors** — bound to a variable?
-- [ ] **Corner radius** — bound to a radius variable?
-- [ ] **Padding/gap** — bound to spacing variables?
+- [ ] **Fill colors** — bound to a variable, or hardcoded hex? *(#1)*
+- [ ] **Stroke colors** — bound to a variable? *(#1)*
+- [ ] **Text colors** — bound to a variable? *(#1)*
+- [ ] **Bound to the right tier** — bound to a **semantic** token, not directly to a primitive (`blue-500`)? *(#2)*
+- [ ] **Bound to the right role** — when several tokens pixel-match, is the *role-correct* one used (e.g. `gap-inline`, not just any 8px spacing)? *(#2)*
+- [ ] **Corner radius** — bound to a radius variable (all 4 corners)? *(#3)*
+- [ ] **Padding/gap** — bound to spacing variables, none unbound/off-scale? *(#3)*
 - [ ] **Font family** — matches the project's configured font?
-- [ ] **Font size** — matches a typography token?
+- [ ] **Font size** — from the type scale (a Text Style), not ad-hoc? *(#9)*
 - [ ] **Line height** — matches a typography token?
 
 ### Component usage
-- [ ] **Shared components used** — are published library components being used where they should be?
-- [ ] **Detached instances** — any instances that have been detached from their component?
-- [ ] **Ad-hoc recreation** — UI primitives (buttons, inputs, cards) rebuilt as raw frames instead of component instances?
+- [ ] **Shared components used** — are published library components being used where they should be? *(#12)*
+- [ ] **Detached instances** — any instances that have been detached from their component? *(#4)*
+- [ ] **Text-as-icon** — any `✕`/`✓`/`→`/`▾` typed as text characters instead of an icon component? *(#5)*
+- [ ] **Ad-hoc recreation** — UI primitives (buttons, inputs, cards) rebuilt as raw frames instead of component instances? *(#12)*
+- [ ] **Variant drift** — a system component edited off-spec locally? *(#10)*
+- [ ] **Combinatorial variants** — a variant set with axes that should be boolean/swap properties? *(#7)*
+- [ ] **Missing states** — only a happy-path frame, no hover/pressed/disabled/focus? *(#8)*
+- [ ] **Dead properties** — an exposed component property that binds to nothing? *(#11)*
 - [ ] **Repeated patterns** — similar sibling structures that should be a component?
 
 ### Layout quality
 - [ ] **Auto-layout** — are frames using auto-layout where appropriate?
 - [ ] **Fixed positioning** — any elements with absolute positioning that should be in auto-layout?
-- [ ] **Spacing consistency** — does spacing follow the project's spacing scale?
-- [ ] **Radius nesting** — inner radius < outer radius - padding?
+- [ ] **Hug vs Fill** — any lopsided layout from a child set to HUG that should FILL?
+- [ ] **Spacing consistency** — does spacing follow the project's spacing scale (no off-scale magic numbers)? *(#3)*
+- [ ] **Alignment** — shared baselines and consistent edges, no few-px misalignment?
+- [ ] **Radius nesting** — inner radius < outer radius - padding? *(#6)*
+- [ ] **Consistency drift** — radius/stroke/shadow consistent across the set? *(#6)*
+- [ ] **Naming** — layers/tokens role-named, not appearance-named or `Frame 47`? *(#9)*
 
 ### Variable health
 - [ ] **Unused variables** — defined but not applied anywhere?
@@ -80,9 +93,9 @@ Each finding gets a severity level:
 
 ### Evidence standard
 Every finding must include:
-1. **What** — the specific element and property
+1. **What** — the specific element and property, with the [§6 red-flag row](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list) it maps to (e.g. "#2: bound to primitive where a semantic exists")
 2. **Where** — node name and location in the layer tree
-3. **Expected** — what the design system specifies
+3. **Expected** — what the design system specifies (the "right way" column for that red flag)
 4. **Actual** — what's in the file
 5. **Why it matters** — impact on consistency, maintainability, or handoff
 
