@@ -12,7 +12,8 @@ Universal rules for how code components translate to Figma component sets. The a
 | Union type prop (`"primary" \| "secondary"`) | Variant property |
 | Boolean prop (`disabled`, `loading`) | Boolean property |
 | String prop (`label`, `placeholder`) | Text property |
-| ReactNode prop (`icon`, `leftSlot`) | Instance swap property |
+| ReactNode `children` / content region | Slot property (native `SLOT`) |
+| ReactNode prop (`icon`, `leftSlot`) — fixed swappable | Instance swap property |
 | Size prop (`"sm" \| "md" \| "lg"`) | Variant property (size axis) |
 | State (hover, pressed, focused) | Variant property (state axis) or interactive component state |
 | Conditional rendering | Boolean property toggling layer visibility |
@@ -80,7 +81,7 @@ Component frame
 ├── gap: bound to spacing variables
 ├── sizing: hug contents (default) — see Sizing Rules below
 ├── children:
-│   ├── Slot instance (INSTANCE_SWAP property, NOT an empty frame)
+│   ├── Content slot (native SLOT property, or INSTANCE_SWAP fallback — NOT an empty frame)
 │   ├── Text layer (TEXT property + all 4 typography variables bound)
 │   └── Trailing element (optional)
 ```
@@ -110,11 +111,21 @@ parent.appendChild(child);
 child.layoutSizingHorizontal = "FILL"; // must come AFTER appendChild
 ```
 
-### Slots: INSTANCE_SWAP (native Slots not yet available via Plugin API)
+### Content slots: native SLOT (primary), INSTANCE_SWAP (fallback)
 
-Figma's native Slots feature cannot be created programmatically (no `createSlot()`, SLOT type rejected by `componentPropertyReferences`). Use INSTANCE_SWAP as the workaround. After build, the user can manually convert to native Slots in the Figma UI if desired.
+Native Slots are **GA since 2026-06-10** and creatable via the Plugin API. Use a native `SLOT` for freeform content regions (Card content, BottomSheet content, Dialog footer); use INSTANCE_SWAP when you want to swap a *specific* component (icon, avatar), or as a fallback on older runtimes.
 
-Content slots in components (Card content, BottomSheet content, Dialog footer) must be real INSTANCE_SWAP properties:
+**Native SLOT (primary):**
+
+```javascript
+// Freeform content region — closest to React `children`
+const slotNode = parent.createSlot();
+parent.appendChild(slotNode);
+slotNode.layoutSizingHorizontal = "FILL";   // after append
+parent.addComponentProperty("Content", "SLOT", slotNode.id, {});
+```
+
+**INSTANCE_SWAP (fallback / fixed swappable component):**
 
 ```javascript
 // 1. Create a placeholder component
@@ -132,7 +143,7 @@ slot.layoutSizingHorizontal = "FILL";
 parent.addComponentProperty("Content", "INSTANCE_SWAP", placeholder.id);
 ```
 
-**Never use a raw Frame as a slot.** Consumers cannot swap content into frames — only into instance swap properties.
+**Never use a raw Frame as a slot.** Consumers cannot fill or swap content into frames — only into SLOT or INSTANCE_SWAP properties. In `component-mapping.json`, native slots map to `kind: "slot"` and swappable instances to `kind: "instanceSwap"`.
 
 For optional slots, pair with a boolean property:
 ```javascript

@@ -435,9 +435,28 @@ for (const child of btnSet.children) {
 
 ---
 
-## Instance Swap Slots (NOT Empty Frames)
+## Content Slots: native SLOT (primary) — NOT empty frames
 
-**Content slots must be real INSTANCE_SWAP component properties, not empty frames.**
+**Content slots must be real component properties, not empty frames.** As of the Slots GA release (2026-06-10), prefer the native `SLOT` type; fall back to INSTANCE_SWAP only on older runtimes or when a fixed swappable component (icon, avatar) is what you actually want.
+
+### Native SLOT (primary)
+
+```javascript
+// Create a native slot inside the component — freeform content region
+const comp = figma.createComponent();
+const slotNode = comp.createSlot();          // returns a SlotNode
+comp.appendChild(slotNode);                  // place in the auto-layout flow
+slotNode.layoutSizingHorizontal = "FILL";    // after append
+
+// Register as a SLOT component property (optional slotSettings)
+const slotKey = comp.addComponentProperty("Content", "SLOT", slotNode.id, {});
+```
+
+Consumers can drop any content into a native slot — closer to the React `children` model than INSTANCE_SWAP. Map these to `kind: "slot"` in `component-mapping.json`.
+
+### INSTANCE_SWAP (fallback / fixed swappable component)
+
+Use when you want consumers to swap a *specific* component (an icon set, an avatar) rather than freeform content — or on a runtime without Slots:
 
 ```javascript
 // Create placeholder component for default slot value
@@ -491,11 +510,18 @@ const parent = stableFrame.findOne(n => n.name === "ParentName");
 
 ---
 
-## Slots vs INSTANCE_SWAP (API Limitation)
+## Slots vs INSTANCE_SWAP (now both available)
 
-Figma's native **Slots** feature cannot be created via the Plugin API (no `createSlot()` method, SLOT type rejected by `componentPropertyReferences`). Use INSTANCE_SWAP as the workaround. After the automated build, users can convert to native Slots in the Figma UI.
+Figma's native **Slots** are **GA as of 2026-06-10** and fully creatable via the Plugin API:
+- `ComponentNode.createSlot()` returns a `SlotNode`
+- `addComponentProperty(name, "SLOT", defaultValue, { slotSettings })` accepts the `"SLOT"` type
+- `ComponentPropertyOptions.slotSettings` configures slot behavior
 
-*(Last verified: 2026-03-25 against Figma Plugin API)*
+**Decision guide:**
+- **Native `SLOT`** — freeform content regions (Card content, Dialog body, BottomSheet content). Closest to React `children`. Use this by default.
+- **`INSTANCE_SWAP`** — swapping a specific component variant (icon, avatar, a chosen button). Also the fallback on older Figma runtimes.
+
+*(Last verified: 2026-06-10 — Figma Slots GA release)*
 
 ---
 

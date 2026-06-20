@@ -1,12 +1,14 @@
 ---
 name: figma-suite
 description: >
-  Bidirectional design system sync between code tokens and Figma variables,
-  component library generation, screen design composition, and design audit.
-  Use when syncing design tokens to/from Figma, building Figma component libraries,
-  designing new screens in Figma, or auditing Figma files for design system compliance.
+  Bidirectional design system sync between code and Figma — tokens/variables,
+  components, and a Zod-validated code<->Figma component mapping — plus component
+  library generation, screen design composition, and design audit. Use when syncing
+  design tokens or components to/from Figma, keeping code and Figma components in sync,
+  mapping code props to Figma properties (incl. Code Connect), building Figma component
+  libraries, designing new screens in Figma, or auditing Figma files for compliance.
 argument-hint: "[sync|build-library|design|audit|update-guide] [options]"
-allowed-tools: Read, Write, Edit, Glob, Grep, WebSearch, mcp__figma__get_design_context, mcp__figma__get_screenshot, mcp__figma__get_metadata, mcp__figma__search_design_system, mcp__figma__use_figma, mcp__figma__get_variable_defs, mcp__figma__generate_figma_design, mcp__figma__get_figjam, mcp__figma__whoami, mcp__figma__get_code_connect_map, mcp__figma__get_code_connect_suggestions, mcp__figma__send_code_connect_mappings, mcp__figma__add_code_connect_map, mcp__figma__create_design_system_rules
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, mcp__figma__get_design_context, mcp__figma__get_screenshot, mcp__figma__get_metadata, mcp__figma__search_design_system, mcp__figma__use_figma, mcp__figma__get_variable_defs, mcp__figma__generate_figma_design, mcp__figma__get_figjam, mcp__figma__whoami, mcp__figma__get_code_connect_map, mcp__figma__get_code_connect_suggestions, mcp__figma__get_context_for_code_connect, mcp__figma__send_code_connect_mappings, mcp__figma__add_code_connect_map, mcp__figma__create_design_system_rules
 compatibility: >
   Requires the official Figma MCP server (https://mcp.figma.com/mcp), a first-party
   remote endpoint operated by Figma, Inc. The mcp__figma__use_figma tool sends Figma
@@ -16,7 +18,7 @@ compatibility: >
   endpoint.
 metadata:
   author: robukh
-  version: "1.2.0"
+  version: "1.3.0"
   external-endpoint: https://mcp.figma.com/mcp
   external-endpoint-provider: Figma, Inc.
   external-endpoint-auth: OAuth (user-initiated)
@@ -113,10 +115,11 @@ Dispatch based on `$ARGUMENTS`:
 
 | Argument | Workflow | Description |
 |----------|----------|-------------|
-| `setup` | [setup.md](workflows/setup.md) | First-time init: scan project, generate token map and component contracts |
-| `sync` | [sync-tokens.md](workflows/sync-tokens.md) | Diff code tokens vs Figma variables, show drift report, apply after approval |
-| `sync --to-figma` | [sync-tokens.md](workflows/sync-tokens.md) | One-way push: code to Figma |
-| `sync --to-code` | [sync-tokens.md](workflows/sync-tokens.md) | One-way pull: Figma to code tokens |
+| `setup` | [setup.md](workflows/setup.md) | First-time init: scan project, generate token map, component contracts, and `component-mapping.json` |
+| `sync` | [sync.md](workflows/sync.md) | **Full bidirectional loop** — diff tokens + components + mapping, report, apply after approval, update `component-mapping.json` |
+| `sync --tokens` | [sync.md](workflows/sync.md) | Tokens only (classic token sync) |
+| `sync --components` | [sync.md](workflows/sync.md) | Components + mapping only |
+| `sync --to-figma` / `--to-code` | [sync.md](workflows/sync.md) | One-way direction (composes with scope flags) |
 | `build-library` | [build-library.md](workflows/build-library.md) | Generate or rebuild Figma component library from code components |
 | `design <description>` | [design-screen.md](workflows/design-screen.md) | Compose a new screen in Figma using design system components |
 | `audit` | [audit.md](workflows/audit.md) | Read-only audit of Figma file for DS compliance |
@@ -307,8 +310,9 @@ When invoked, run this discovery sequence before dispatching to a workflow:
 2. **Auto-discover tokens**: If no config or `tokenSource: "auto"`, scan for token files in the codebase
 3. **Identify framework**: Check for `tailwind.config.*`, `global.css`, `theme.*` to understand the styling system
 4. **Find components**: Scan configured or common paths (`src/components/ui`, `src/components`, `components/`)
-5. **Load design rules**: Read the project's `design-rules.md` from the workspace folder (see [config-schema.md](reference/config-schema.md))
-6. **Report findings**: Tell the user what was discovered before proceeding
+5. **Load rules**: Read `design-rules.md` (designing in Figma) and `code-rules.md` (writing code from Figma) from the workspace folder (see [config-schema.md](reference/config-schema.md))
+6. **Load component mapping**: Read `component-mapping.json` and validate it against [mapping-schema.md](reference/mapping-schema.md) — this is the agent's code↔Figma source of truth
+7. **Report findings**: Tell the user what was discovered before proceeding
 
 ---
 
@@ -330,15 +334,15 @@ Every user-facing text layer in a component MUST have:
 
 Example: Dialog has Title (text + `Show Title`) and Body (text + `Show Body`). This lets consumers create a title-only dialog by hiding the body.
 
-### Every child component = INSTANCE_SWAP + boolean toggle
+### Every content slot = SLOT (or INSTANCE_SWAP fallback) + boolean toggle
 
-Every nested component instance MUST have:
-1. An **INSTANCE_SWAP property** so consumers can swap variants/components
+Every nested component instance / content region MUST have:
+1. A **SLOT property** (native, GA since 2026-06-10 — `createSlot()` / `addComponentProperty(name, "SLOT", ...)`) for freeform content regions, **or** an **INSTANCE_SWAP property** for swapping a specific component (icon, avatar). INSTANCE_SWAP is also the fallback on older Figma runtimes.
 2. A **BOOLEAN property** to show/hide it (e.g., `Show CTA`, `Show Icon`)
 
-**When to skip:** Structural instances that are integral to the component's layout and should never be swapped (e.g., an internal spacer component). Report as exception.
+**When to skip:** Structural instances that are integral to the component's layout and should never be swapped or filled (e.g., an internal spacer component). Report as exception.
 
-Never use raw frames as content slots — only INSTANCE_SWAP properties.
+Never use raw frames as content slots — only SLOT or INSTANCE_SWAP properties.
 
 ### Every visual property = variable binding
 
@@ -374,7 +378,9 @@ Works in any setup: single file, separate library file(s), no library yet, or ad
 
 ### Component mapping
 
-Code and Figma components are not always 1:1. Setup generates a `component-mapping.generated.md` (relative within workspace) that tracks the relationship:
+Code and Figma components are not always 1:1. Setup generates a `component-mapping.json` (relative within workspace) — a **Zod-validated** file that tracks both the relationship *and* property-/value-level mapping. See [mapping-schema.md](reference/mapping-schema.md) for the schema, examples, validation, and the Code Connect bridge.
+
+Per-entry **status**:
 
 - **matched** — direct counterpart, keep in sync
 - **code-only** — no Figma representation (wrappers, logic-only)
@@ -383,7 +389,9 @@ Code and Figma components are not always 1:1. Setup generates a `component-mappi
 - **merged** — multiple code components → one Figma component
 - **diverged** — both exist but intentionally differ (document why)
 
-This file is user-editable. All workflows respect it: build-library skips code-only, audit ignores diverged with documented reason, design uses the correct Figma component regardless of code structure.
+Each entry also carries a flexible `propertyMap` linking code props ↔ Figma properties (names may differ, e.g. code `style` ↔ Figma `Type`) with `figmaValue → codeValue` value maps. This is what lets the agent translate correctly in both directions.
+
+This file is user-editable and Zod-validated (validate by inspection, or `node skills/figma-suite/schema/validate.mjs <path>`). All workflows respect it: sync diffs against it and updates it each loop, build-library skips code-only, audit ignores diverged with documented reason, design uses the correct Figma component and value regardless of code structure.
 
 ---
 
@@ -405,7 +413,8 @@ The preset controls component names, property names, layer names, token separato
 
 For detailed guidance on specific topics. **Only load these when actively needed — do not read all at once.**
 
-- [Config schema](reference/config-schema.md) — project config structure, multi-file model, design rules file format
+- [Config schema](reference/config-schema.md) — project config structure, multi-file model, design rules + code rules file formats
+- [Component mapping schema](reference/mapping-schema.md) — `component-mapping.json` Zod schema, examples, validation, Code Connect bridge
 - [Token format mapping](reference/token-map.md) — how different code token formats map to Figma variables
 - [Component contracts](reference/component-contracts.md) — component translation rules, sizing, slots
 - [Plugin API patterns](reference/plugin-api-patterns.md) — correct Figma Plugin API usage: sizing, text styles, instance swap, composition, known constraints

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/robukh/figma-suite/schema/mapping.schema.json",
+  "title": "Component Mapping",
+  "description": "Generated from the Zod schema in reference/mapping-schema.md. Keep in sync with that file and schema/validate.mjs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "generatedAt", "components"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "generatedAt": { "type": "string", "description": "ISO 8601 timestamp" },
+    "components": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/componentEntry" }
+    }
+  },
+  "$defs": {
+    "valueMap": {
+      "type": "object",
+      "description": "figmaValue -> codeValue",
+      "additionalProperties": { "type": ["string", "boolean", "number"] }
+    },
+    "propertyMapEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "anyOf": [
+        { "required": ["codeProp"] },
+        { "required": ["figmaProp"] }
+      ],
+      "properties": {
+        "codeProp": { "type": "string" },
+        "figmaProp": { "type": "string", "description": "Base name only — no #uid suffix" },
+        "kind": { "enum": ["enum", "boolean", "text", "instanceSwap", "slot"] },
+        "values": { "$ref": "#/$defs/valueMap" },
+        "booleanMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["true", "false"],
+          "properties": {
+            "true": { "type": "string" },
+            "false": { "type": "string" }
+          }
+        },
+        "required": { "type": "boolean", "default": false },
+        "notes": { "type": "string" }
+      }
+    },
+    "codeSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "exportName"],
+      "properties": {
+        "path": { "type": "string", "description": "Relative to projectPath" },
+        "exportName": { "type": "string" },
+        "props": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+    "figmaSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileKey", "nodeId", "componentName"],
+      "properties": {
+        "fileKey": { "type": "string" },
+        "nodeId": { "type": "string" },
+        "componentName": { "type": "string" },
+        "properties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Base property names only — no #uid suffix"
+        },
+        "published": { "type": "boolean", "default": false }
+      }
+    },
+    "componentEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "status": {
+          "enum": ["matched", "code-only", "figma-only", "split", "merged", "diverged"]
+        },
+        "code": { "$ref": "#/$defs/codeSide" },
+        "figma": {
+          "oneOf": [
+            { "$ref": "#/$defs/figmaSide" },
+            { "type": "array", "items": { "$ref": "#/$defs/figmaSide" } }
+          ]
+        },
+        "propertyMap": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/propertyMapEntry" },
+          "default": []
+        },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "code-only" } } },
+          "then": { "not": { "required": ["figma"] } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "figma-only" } } },
+          "then": { "not": { "required": ["code"] } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "matched" } } },
+          "then": { "required": ["code", "figma"] }
+        }
+      ]
+    }
+  }
+}

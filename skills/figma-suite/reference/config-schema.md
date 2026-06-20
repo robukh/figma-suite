@@ -80,7 +80,10 @@ The workspace folder is named by the project name (kebab-cased), not by a Figma 
   // === Design rules ===
   // Path to the project's design rules file, relative to workspace folder.
   // Auto-generated during setup, user-editable afterward.
-  "designRulesPath": "design-rules.md"
+  // design-rules.md  -> rules for DESIGNING in Figma
+  // code-rules.md    -> rules for WRITING/maintaining CODE from Figma
+  "designRulesPath": "design-rules.md",
+  "codeRulesPath": "code-rules.md"
 }
 ```
 
@@ -107,13 +110,19 @@ Each entry is a Figma file where screens and flows are composed using library co
 
 ### `designRulesPath` (string)
 
-Points to a markdown file in the workspace folder that contains project-specific design rules. This file is:
+Points to a markdown file in the workspace folder that contains project-specific design rules **for designing in Figma**. This file is:
 
 1. **Auto-generated** during setup by scanning the library's variables, components, and structure
 2. **User-editable** — the designer can refine rules at any time
 3. **Read by every workflow** that creates or evaluates visual design (design, build-library, audit)
 
 See the "Design Rules File" section below for the expected format.
+
+### `codeRulesPath` (string)
+
+Points to a markdown file in the workspace folder that contains project-specific rules **for the coding agent** — rules it follows when writing or maintaining code from Figma (the `--to-code` half of the loop, and any design-to-code handoff). This is the code-facing counterpart to `designRulesPath`. Same lifecycle: auto-generated during setup, user-editable, read by the code-facing paths.
+
+See the "Code Rules File" section below for the expected format.
 
 ---
 
@@ -182,6 +191,52 @@ If no design rules file exists (e.g., the user deleted it or skipped generation)
 
 ---
 
+## Code Rules File
+
+The code rules file (`code-rules.md` by default) lives in the workspace folder alongside `config.json`. It is the code-facing counterpart to `design-rules.md`: rules the AI follows when **writing or maintaining code from Figma** (the `--to-code` half of `sync`, and any design-to-code handoff). Keeping it separate from `design-rules.md` avoids mixing two opposite audiences (designing *in* Figma vs. coding *from* Figma) in one document.
+
+### How it's generated
+
+During setup, after scanning the codebase: detect the styling system, token format, component directory conventions, and naming preset, then generate a draft with concrete, project-specific defaults. Present it to the user for review and editing.
+
+### Expected sections
+
+```markdown
+# Code Rules — {Project Name}
+
+## Component mapping
+- Always consult component-mapping.json before generating code from a Figma node.
+- Translate Figma property values to code values via propertyMap.values (figmaValue → codeValue).
+- For figma-only components, do not invent code; flag them. For code-only, never expect a Figma node.
+
+## Naming & file conventions
+- Where new components go: {detected component dir}
+- File naming: {e.g. PascalCase.tsx}; one component per file; named exports
+
+## Props & types
+- Figma VARIANT → TypeScript union type ({"primary" | "secondary"})
+- Boolean property → boolean prop; TEXT → string prop; SLOT/INSTANCE_SWAP → children/ReactNode
+
+## Tokens in code
+- Canonical token format: {detected, e.g. CSS custom properties}
+- Always reference tokens (var(--token)) — never hardcode hex/px
+
+## Styling system
+- {Tailwind / CSS modules / styled-components} conventions, class ordering
+
+## Accessibility
+- Required a11y props per component type (role, label, min 44×44 touch target)
+
+## Do NOT
+- {anti-patterns: no inline styles, no detached values, no duplicate components}
+```
+
+### Fallback behavior
+
+If no code rules file exists, workflows should apply general best practices: follow the existing codebase conventions, use the project's canonical token format, never hardcode values that exist as tokens, and consult `component-mapping.json` for the code↔Figma correspondence.
+
+---
+
 ## Workspace Folder Structure
 
 The workspace can live in one of two locations, chosen during setup:
@@ -190,10 +245,11 @@ The workspace can live in one of two locations, chosen during setup:
 ```
 {project-root}/.figma-suite/
 ├── config.json                            # Project configuration (this schema)
-├── design-rules.md                        # Project-specific design rules (user-editable)
+├── design-rules.md                        # Rules for designing in Figma (user-editable)
+├── code-rules.md                          # Rules for writing code from Figma (user-editable)
 ├── token-map.generated.md                 # Library tokens → Figma variables
 ├── component-contracts.generated.md       # Library components → Figma component sets
-└── component-mapping.generated.md         # Code ↔ Figma component relationships
+└── component-mapping.json                 # Code ↔ Figma component + property/value mapping
 ```
 
 **Global** (`workspaceLocation: "global"`):
@@ -201,9 +257,12 @@ The workspace can live in one of two locations, chosen during setup:
 <HOME>/.claude/figma-suite/{project-name}/
 ├── config.json
 ├── design-rules.md
+├── code-rules.md
 ├── token-map.generated.md
 ├── component-contracts.generated.md
-└── component-mapping.generated.md
+└── component-mapping.json
 ```
+
+`component-mapping.json` is the machine-readable code↔Figma mapping (statuses, plus property- and value-level mapping). It is Zod-validated — see [mapping-schema.md](mapping-schema.md) for the schema, examples, validation, and the Code Connect bridge.
 
 Project-level is default when inside a codebase. Global is default (and the only option) for standalone mode. The folder is named `{project-name}` (kebab-cased from `config.name`). If two global projects share a name, append a short hash.

@@ -1,0 +1,12 @@
+{
+  "name": "figma-suite-mapping-validator",
+  "private": true,
+  "type": "module",
+  "description": "Optional, on-demand validator for component-mapping.json. Install only if you want a hard machine check; the skill works without it. Scoped here so the skill root stays zero-dependency.",
+  "scripts": {
+    "validate": "node validate.mjs"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

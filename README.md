@@ -4,7 +4,9 @@
 
 A Claude Code skill set for Figma. Syncs design tokens, builds component libraries, designs screens, and audits for design system compliance — all through natural language.
 
-Turns the official Figma MCP server into a full design workflow: proper auto-layout, variable bindings on every property, component composition via instances, text styles, instance swap slots, and screenshot-validated output. No hardcoded values, no detached instances, no raw hex codes.
+Turns the official Figma MCP server into a full design workflow: proper auto-layout, variable bindings on every property, component composition via instances, text styles, native slots, and screenshot-validated output. No hardcoded values, no detached instances, no raw hex codes.
+
+A bidirectional loop keeps code and Figma in sync — talk to the agent, edit tokens/components/designs on either side, and run `sync` to converge. The code↔Figma relationship lives in a Zod-validated `component-mapping.json` with flexible property- and value-level mapping (so code `style` can map to Figma `Type`, and `"primary"` to `"Primary"`), and bridges to Figma Code Connect when available.
 
 ## Requirements
 
@@ -84,9 +86,11 @@ npx skills update robukh/figma-suite
 ```
 /figma-suite                   # Auto-setup on first run, then show workflow menu
 /figma-suite setup             # (Re)scan project, generate token/component mappings
-/figma-suite sync              # Diff code tokens vs Figma variables
-/figma-suite sync --to-figma   # Push code tokens to Figma
-/figma-suite sync --to-code    # Pull Figma variables to code
+/figma-suite sync              # Full bidirectional loop: tokens + components + mapping
+/figma-suite sync --tokens     # Tokens only (classic token sync)
+/figma-suite sync --components # Components + mapping only
+/figma-suite sync --to-figma   # One-way push to Figma (composes with scope flags)
+/figma-suite sync --to-code    # One-way pull to code (composes with scope flags)
 /figma-suite build-library     # Generate Figma component library
 /figma-suite design <desc>     # Design a screen in Figma
 /figma-suite audit             # Audit Figma file for DS compliance
@@ -99,10 +103,10 @@ npx skills update robukh/figma-suite
 Composes production-quality screens in Figma using your design system. Every element is a component instance with variables bound to every property — colors, spacing, radius, typography. Follows your project's design rules for layout, spacing hierarchy, and typography scale. Validates every section with screenshots.
 
 ### Build Component Libraries
-Reads your components (from code or from Figma), extracts variants/states/props, and generates Figma component sets with auto-layout, variable bindings, instance swap slots, text properties, and boolean toggles. Builds in dependency order — primitives first, composites last. Every component is fully parameterized, zero raw values.
+Reads your components (from code or from Figma), extracts variants/states/props, and generates Figma component sets with auto-layout, variable bindings, native slots (instance swap for fixed swappable children), text properties, and boolean toggles. Builds in dependency order — primitives first, composites last. Every component is fully parameterized, zero raw values.
 
-### Sync Tokens
-Bidirectional sync between code design tokens and Figma variables. Detects drift in 9 categories, shows a dry-run report, and applies changes after approval. Supports W3C Design Tokens, Style Dictionary, CSS Custom Properties, Tailwind, and JS theme objects.
+### Sync (bidirectional loop)
+The cyclical sync across three lanes — **tokens**, **components**, and the **mapping** itself. Detects drift, shows a dry-run report, applies after approval, then re-reads and updates `component-mapping.json` so the agent always holds an up-to-date code↔Figma picture. Token sync supports W3C Design Tokens, Style Dictionary, CSS Custom Properties, Tailwind, and JS theme objects. Component sync diffs live Figma properties/values against the mapping's flexible `propertyMap`. Optionally compiles eligible mappings into Figma Code Connect (`.figma.ts`) when on an Org/Enterprise plan — and works fully without it.
 
 ### Audit
 Read-only inspection of any Figma screen for design system compliance. Checks token binding, component usage, layout quality, and variable health. Scores 0–100 with severity-ranked findings and actionable recommendations.
@@ -117,7 +121,7 @@ The agent follows these rules in every workflow:
 - **Zero raw values** — every fill, stroke, radius, padding, gap, and font property is bound to a variable
 - **Component composition** — nested components are instances, never rebuilt from primitives
 - **Text styles** — typography applied via Text Styles binding all 4 properties (family, size, weight, line-height)
-- **Instance swap slots** — content slots use INSTANCE_SWAP properties, not empty frames
+- **Native slots** — content slots use native SLOT properties (INSTANCE_SWAP for fixed swappable children), not empty frames
 - **Hug contents** — parent components adapt when children resize, hide, or swap
 - **Screenshot validation** — every visual change is captured and verified
 - **Ask when unsure** — the agent derives design decisions from your library; when ambiguous, it asks
@@ -132,24 +136,31 @@ skills/figma-suite/                        # Skill
 ├── SKILL.md                               # Main orchestration + rules
 ├── workflows/
 │   ├── setup.md                           # First-time project init
-│   ├── sync-tokens.md                     # Token sync workflow
+│   ├── sync.md                            # Bidirectional loop: tokens + components + mapping
 │   ├── build-library.md                   # Component library generation
 │   ├── design-screen.md                   # Screen design composition
 │   ├── audit.md                           # Design system audit
 │   └── update-guidelines.md               # Guideline sync
-└── reference/                             # Universal rules (no project-specific data)
-    ├── config-schema.md                   # Config structure, multi-file model, design rules format
-    ├── token-map.md                       # Token format → Figma variable mapping rules
-    ├── component-contracts.md             # Component → Figma translation rules
-    ├── plugin-api-patterns.md             # Figma Plugin API usage patterns + known constraints
-    ├── figma-file-structure.md            # File/page organization conventions
-    └── naming-conventions.md              # Naming presets for components, properties, tokens
+├── reference/                             # Universal rules (no project-specific data)
+│   ├── config-schema.md                   # Config structure, multi-file model, rules-file formats
+│   ├── mapping-schema.md                  # component-mapping.json Zod schema + Code Connect bridge
+│   ├── token-map.md                       # Token format → Figma variable mapping rules
+│   ├── component-contracts.md             # Component → Figma translation rules
+│   ├── plugin-api-patterns.md             # Figma Plugin API usage patterns + known constraints
+│   ├── figma-file-structure.md            # File/page organization conventions
+│   └── naming-conventions.md              # Naming presets for components, properties, tokens
+└── schema/                                # Optional, on-demand mapping validator (zero-dep by default)
+    ├── mapping.schema.json                # JSON Schema (editor autocomplete via $schema)
+    ├── validate.mjs                       # node validate.mjs <mapping> — installs zod only if run
+    └── package.json                       # Pins zod, scoped here so the skill root stays zero-dependency
 
 Generated by /figma-suite setup — goes into <HOME>/.claude/figma-suite/{project-name}/:
 ├── config.json                            # Project config (libraries, design files, presets)
-├── design-rules.md                        # Project-specific design rules (user-editable)
+├── design-rules.md                        # Rules for designing in Figma (user-editable)
+├── code-rules.md                          # Rules for writing code from Figma (user-editable)
 ├── token-map.generated.md                 # Your tokens → Figma variables
-└── component-contracts.generated.md       # Your components → Figma component sets
+├── component-contracts.generated.md       # Your components → Figma component sets
+└── component-mapping.json                 # Code ↔ Figma component + property/value mapping (Zod-validated)
 ```
 
 ## Security

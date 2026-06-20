@@ -82,7 +82,7 @@ Example format (illustrative only — real content comes from discovery):
 Before components, ensure Figma has the token foundation:
 
 1. Check if variable collections exist (Primitives, Semantic, Typography, Spacing)
-2. If missing, run the [sync-tokens](sync-tokens.md) workflow first
+2. If missing, run the [sync](sync.md) workflow first (use `sync --tokens` for tokens only)
 3. Verify font family is available in the Figma file
 
 > **If tokens are already synced, skip to Phase 2.**
@@ -156,14 +156,15 @@ Every component must expose the right properties so consumers can customize with
 | **Variant** | Visual style choices (2+ options) | `Variant=Primary\|Secondary`, `Size=Sm\|Md\|Lg` |
 | **Boolean** | Show/hide optional elements | `Show Icon`, `Show CTA`, `Disabled`, `Loading` |
 | **Text** | Editable text content | `Label`, `Title`, `Description`, `Placeholder` |
-| **Instance swap** | Replaceable child components | `Icon`, `Leading Action`, `Trailing Element` |
+| **Slot** (native, GA 2026-06-10) | Freeform content regions | `Content`, `Body`, `Footer` (`createSlot()` + `addComponentProperty(name,"SLOT",...)`) |
+| **Instance swap** | Swap a specific child component | `Icon`, `Leading Action`, `Trailing Element` |
 | **Exposed nested properties** | Bubble up child instance properties | Expose Button.Label through parent as `CTA Label` |
 
 **Slots and instance swap best practices:**
-- Define instance swap properties for every child component that users might want to customize
-- Set a sensible **default instance** — the most common variant
-- Use **preferred values** to constrain which components can be swapped in (e.g., only icon components for an icon slot)
-- For optional slots, pair with a boolean property: `Show Icon` controls visibility, `Icon` controls which icon
+- Use a **native `SLOT`** for freeform content regions (Card content, Dialog body) — closest to React `children`. Use **INSTANCE_SWAP** to swap a specific component (icon, avatar), or as a fallback on older runtimes.
+- For instance swap: set a sensible **default instance** (the most common variant) and use **preferred values** to constrain which components can be swapped in
+- For optional slots/swaps, pair with a boolean property: `Show Icon` controls visibility, `Icon` controls which icon
+- Map native slots to `kind: "slot"` and swappable instances to `kind: "instanceSwap"` in `component-mapping.json`
 
 **Exposed nested properties:**
 When component A nests component B, expose B's most-used properties through A:
@@ -288,7 +289,8 @@ In a separate `use_figma` call, add properties for **every** qualifying element:
 |---|---|---|
 | Every user-facing text layer | `addComponentProperty("Label", "TEXT", "default")` | `textNode.componentPropertyReferences = { characters: key }` |
 | Every optional element | `addComponentProperty("Show Label", "BOOLEAN", true)` | `node.componentPropertyReferences = { visible: key }` |
-| Every nested instance | `addComponentProperty("Icon", "INSTANCE_SWAP", defaultId)` | `instance.componentPropertyReferences = { mainComponent: key }` |
+| Every freeform content region | `addComponentProperty("Content", "SLOT", slotNode.id, {})` | native slot (`parent.createSlot()`) — no manual reference needed |
+| Every fixed swappable child | `addComponentProperty("Icon", "INSTANCE_SWAP", defaultId)` | `instance.componentPropertyReferences = { mainComponent: key }` |
 
 **Capture every returned key** from `addComponentProperty` and link it immediately. Do NOT add properties without linking them. Property keys have a `#uid` suffix (e.g., `"Label#4:0"`) — never hardcode or guess these keys, as using the wrong key produces **silent failures**.
 
@@ -418,12 +420,12 @@ When components already exist in Figma:
 
 ## Figma Plugin API Implementation Rules
 
-See [plugin-api-patterns.md](../reference/plugin-api-patterns.md) for the full reference on correct Plugin API usage: sizing (hug vs fixed), text style application, instance swap slots, component composition via instances, the Slots vs INSTANCE_SWAP API limitation, and known API constraints.
+See [plugin-api-patterns.md](../reference/plugin-api-patterns.md) for the full reference on correct Plugin API usage: sizing (hug vs fixed), text style application, native SLOT vs INSTANCE_SWAP content slots, component composition via instances, and known API constraints.
 
 All patterns in that file are **mandatory** for this workflow. Key reminders:
 
 - Never call `resize()` on a HUG axis
 - Use `setTextStyleIdAsync()` for typography, not individual variable bindings
-- Content slots must be INSTANCE_SWAP properties, not empty frames
+- Content slots must be native SLOT properties (INSTANCE_SWAP for fixed swappable children), never empty frames
 - Build in strict tier order — never build a component before its dependencies
 - Keep `use_figma` scripts under ~200 lines — split larger operations

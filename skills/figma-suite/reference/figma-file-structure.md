@@ -183,7 +183,7 @@ Frame: "Screen Name" ({frameWidth} x {frameHeight} from config)
 
 ## Slots Note
 
-Figma's native **Slots** feature cannot be created via the Plugin API (no `createSlot()` method). The skill uses **INSTANCE_SWAP** properties with placeholder components as a workaround. After the automated build, users can optionally convert these to native Slots in the Figma UI (right-click → "Convert to slot" or Ctrl+Shift+S).
+Figma's native **Slots** are **GA since 2026-06-10** and creatable via the Plugin API (`ComponentNode.createSlot()`, `addComponentProperty(name, "SLOT", ...)`). Use native `SLOT` for freeform content regions; use **INSTANCE_SWAP** for swapping a specific component (icon, avatar) or as a fallback on older runtimes. See [plugin-api-patterns.md](plugin-api-patterns.md) and [component-contracts.md](component-contracts.md).
 
 ---
 
@@ -233,4 +233,4 @@ Universal rules regardless of preset:
 - [ ] Screen frames use platform preset dimensions
 - [ ] Auto-layout used throughout (no absolute positioning except where intentional)
 - [ ] Light/dark modes both represented (per chosen strategy)
-- [ ] INSTANCE_SWAP used for all content slots (native Slots can be converted manually)
+- [ ] Native SLOT (or INSTANCE_SWAP fallback) used for all content slots
