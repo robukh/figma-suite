@@ -37,7 +37,7 @@ Before building anything, inventory available design resources from all configur
 For each library, call `mcp__figma__search_design_system` to find:
 - All published components and their variants
 - Component property definitions
-- Instance swap slots
+- Content regions — `INSTANCE_SWAP` properties and `SLOT` properties to fill
 
 **Index what's available across all libraries.** Never recreate a component that already exists in any library.
 
@@ -85,15 +85,15 @@ Decompose the screen into logical sections. Build each one sequentially.
 ### For each section:
 
 1. **Plan the section** — identify which components, tokens, and layout to use
-2. **Create a section frame** inside the wrapper:
-   - Auto-layout (vertical or horizontal as needed)
+2. **Create a section frame** inside the wrapper — **always `figma.createAutoLayout()`, never `createFrame()` + absolute `x`/`y`**. Absolute coordinates position the wrapper on the canvas; auto-layout is what holds a section together when text reflows or content changes.
+   - Direction: vertical or horizontal as needed
    - Padding bound to spacing variables
    - Gap bound to spacing variables
    - Fill: transparent or bound to surface variable
-3. **Place component instances** — use `instantiate_component` or create instances via `use_figma`
-   - Set variant properties (e.g., `Variant=Primary, Size=Large`)
-   - Override text properties with screen-specific content
-   - Swap icons via instance swap properties
+3. **Place component instances** via `use_figma` (`component.createInstance()`)
+   - Set variant properties with `setProperties()` (e.g., `Variant=Primary, Size=Large`)
+   - Override text via TEXT properties — discover them first with `instance.componentProperties`, don't write `node.characters` on property-managed text
+   - Swap icons via INSTANCE_SWAP properties; fill freeform regions by `appendChild` onto the SLOT node (`setProperties` throws on a slot key)
 4. **Bind all visual properties to variables**:
    - Background colors → Semantic variables
    - Text colors → Semantic variables

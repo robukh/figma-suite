@@ -112,7 +112,7 @@ export const Meta = z.object({
 - **`values` is `figmaValue → codeValue`.** Covers renames (`"Primary" → "primary"`) and many-to-one collapses.
 - **One file per component, named by `id`.** `id` must be a filename-safe kebab-case slug and MUST equal the filename. The `id` is authoritative; rename the file when the `id` changes. No two files may share an `id`.
 - **`split` is one file; `merged` is several.** `split` (one code component → several Figma components) stays a single file with `figma` as an **array** of `FigmaSide`. `merged` (several code components → one Figma component) is modeled as **separate files** — one per code component, each `status: "merged"`, all pointing at the same `figma.nodeId`, cross-referenced in `notes`.
-- **Never persist the `#uid` suffix.** Figma TEXT/BOOLEAN/INSTANCE_SWAP/SLOT property keys carry a volatile `#uid` suffix (e.g. `Label#4:0`) — see [component-contracts.md](component-contracts.md#component-property-keys). Store only the base name (`Label`); rediscover the suffix at runtime via `componentPropertyDefinitions`.
+- **Never persist the `#uid` suffix.** Figma TEXT/BOOLEAN/INSTANCE_SWAP/SLOT property keys carry a volatile `#uid` suffix (e.g. `Label#4:0`, `Content#7:1`) — see [component-contracts.md](component-contracts.md#component-property-keys). Store only the base name (`Label`, `Content`); rediscover the suffix at runtime via `componentPropertyDefinitions`. For a `kind: "slot"` entry the live key is read from the SlotNode's `componentPropertyReferences.slotContentId`, not from a linked TextNode or instance.
 
 ---
 

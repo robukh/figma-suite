@@ -18,7 +18,7 @@ The Figma-native convention. Best for teams working primarily in Figma.
 | Properties | Title Case | `Size`, `Has Icon`, `Show CTA` |
 | Booleans | Conversational | `Has Icon`, `Show Description`, `Is Disabled` |
 | Layers | Descriptive function | `Label`, `Icon`, `Container`, `Background` |
-| Hidden components | `_` prefix | `_Slot Placeholder`, `_Internal` |
+| Hidden components | `_` prefix | `_Icon Placeholder`, `_Internal` |
 | Private components | `.` prefix | `.GuidelineCard` |
 | Tokens (Figma vars) | Slash-separated lowercase | `color/bg/primary`, `spacing/4` |
 | Tokens (code) | kebab-case | `color-bg-primary`, `spacing-4` |
@@ -77,7 +77,7 @@ Primitive → Semantic → Component token tiers. Best for themed/multi-brand sy
 | Tier 2 (semantic) | `{role}/{modifier}` | `bg/primary`, `text/error`, `border/default` |
 | Tier 3 (component) | `{component}/{property}` | `button/bg-primary`, `input/border-focus` |
 | Primitives scope | Hidden (`[]`) | Not visible to consumers |
-| Semantic scope | Per-property | `FILL_COLOR`, `STROKE_COLOR` |
+| Semantic scope | Per-property | `FRAME_FILL`, `TEXT_FILL`, `STROKE_COLOR` |
 
 **Used by:** Material Design 3, Shopify Polaris, Adobe Spectrum, Atlassian Design System.
 
@@ -139,6 +139,8 @@ Regardless of preset, these rules always apply:
 
 1. **Every text layer** must have a TEXT property — named after its content role (`Title`, `Description`, `Label`, `Placeholder`)
 2. **Every optional element** must have a BOOLEAN property — prefixed with the preset's boolean prefix (`Has Icon`, `Show CTA`, `Is Disabled`)
-3. **Every swappable child** must have an INSTANCE_SWAP property — named after the slot role (`Icon`, `Leading Action`, `CTA Button`)
+3. **Every content region** must have a property, chosen per the [content-region decision table](component-contracts.md#content-regions-slot-vs-instance_swap):
+   - **Specific swappable child** → INSTANCE_SWAP, named after its role (`Icon`, `Leading Action`, `CTA Button`)
+   - **Freeform content region** → native SLOT, named Title Case and singular (`Content`, `Header`, `Footer`)
 4. **Variant properties** must match code prop names (adjusted for case convention)
 5. **No abbreviations** in property names unless universally understood (`CTA` is ok, `desc` is not — use `Description`)

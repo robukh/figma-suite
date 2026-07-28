@@ -116,12 +116,17 @@ stretch to fill its row, a label that won't take available width).
 | Use… | for… | not… |
 |------|------|------|
 | **Boolean** | show/hide a toggle (`Show Icon`) | a 2-value variant axis |
-| **Instance-swap** | swap a specific child component (icon, avatar) | a raw frame slot |
-| **Slot** (native) | freeform content region (Card body) | a raw frame |
+| **Instance-swap** | swap a *specific* child component (icon, avatar) | a freeform region the consumer authors |
+| **Slot** (native) | a freeform content region (Card body) | a specific swappable child, or a raw frame |
 | **Variant** | a *meaningful anatomical/visual* difference | a toggle that could be boolean |
 
 A with/without-icon button is `Show Icon` (boolean) + `Icon` (swap) — **not two variants.** Using a
 variant axis for something that should be boolean is what causes combinatorial explosion (§3).
+
+**Slot vs swap is decided per region, not per component.** A Card whose header carries a swappable
+icon and whose body holds authored content needs *both*: `INSTANCE_SWAP` on the icon, `SLOT` on the
+body. A senior reads each region and asks "does the consumer pick a component here, or write
+content here?" — picking one kind for the whole component is the tell of a shallow pass.
 
 ### Split when anatomy diverges
 

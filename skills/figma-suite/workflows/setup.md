@@ -295,7 +295,7 @@ Steps:
 1. Fill from discovery results (Mode A) or Figma scan (Mode B)
 2. Populate `libraries[]` and `designFiles[]` from collected Figma URLs
 3. Present config for review before writing
-4. Write to `<HOME>/.claude/figma-suite/{project-name}/config.json`
+4. Write to `config.json` in the workspace folder chosen above — `{project-root}/.figma-suite/` (project-level, the default) or `<HOME>/.claude/figma-suite/{project-name}/` (global)
 
 ---
 

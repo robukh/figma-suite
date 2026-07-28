@@ -130,14 +130,15 @@ Every component must expose the right properties so consumers can customize with
 | **Variant** | Visual style choices (2+ options) | `Variant=Primary\|Secondary`, `Size=Sm\|Md\|Lg` |
 | **Boolean** | Show/hide optional elements | `Show Icon`, `Show CTA`, `Disabled`, `Loading` |
 | **Text** | Editable text content | `Label`, `Title`, `Description`, `Placeholder` |
-| **Slot** (native, GA 2026-06-10) | Freeform content regions | `Content`, `Body`, `Footer` (`createSlot()` + `addComponentProperty(name,"SLOT",...)`) |
+| **Slot** (native) | Freeform content regions | `Content`, `Header`, `Footer` — created with `parent.createSlot()` |
 | **Instance swap** | Swap a specific child component | `Icon`, `Leading Action`, `Trailing Element` |
 | **Exposed nested properties** | Bubble up child instance properties | Expose Button.Label through parent as `CTA Label` |
 
 **Slots and instance swap best practices:**
-- Use a **native `SLOT`** for freeform content regions (Card content, Dialog body) — closest to React `children`. Use **INSTANCE_SWAP** to swap a specific component (icon, avatar), or as a fallback on older runtimes.
+- Decide **per region** using the canonical table in [component-contracts.md § Content regions](../reference/component-contracts.md#content-regions-slot-vs-instance_swap): freeform region → `SLOT`; specific swappable child → `INSTANCE_SWAP`. A Card with a swappable header icon and an authored body needs both.
+- **Every slot gets auto-layout** — `layoutMode` `VERTICAL`/`HORIZONTAL`, never left at `NONE`. `GRID` is rejected on slot nodes; nest a `GRID` frame inside the slot instead
 - For instance swap: set a sensible **default instance** (the most common variant) and use **preferred values** to constrain which components can be swapped in
-- For optional slots/swaps, pair with a boolean property: `Show Icon` controls visibility, `Icon` controls which icon
+- For optional regions, pair with a boolean property: `Show Icon` controls visibility, `Icon` controls which icon
 - Map native slots to `kind: "slot"` and swappable instances to `kind: "instanceSwap"` in the component's `component-mappings/{id}.json`
 
 **Exposed nested properties:**
@@ -162,7 +163,7 @@ Read the component file and extract:
 - **Variant axis** — e.g., `variant: "primary" | "secondary" | "outline"`
 - **Size axis** — e.g., `size: "sm" | "md" | "lg"`
 - **State axis** — e.g., default, hover, pressed, disabled, focused, error
-- **Slots** — icon position, text content, badge
+- **Content regions** — which are specific swappable children (icon, badge) vs freeform (`children`, header/body/footer)
 - **Fixed dimensions** — height, min-width, padding from Tailwind classes
 - **Tokens used** — map each class to the corresponding Figma variable
 - **Child components used** — which existing library components does this code component render?
@@ -216,7 +217,7 @@ In a separate `use_figma` call, for **every** text layer created in 2c:
 2. Apply it: `await textNode.setTextStyleIdAsync(styleId)`
 3. If no matching text style exists, set raw font properties and add to exceptions list
 
-**Do not skip any text layer** — each gets a text style or a logged exception. **Never `setBoundVariable` for `fontSize`/`fontWeight`/`lineHeight`** (not bindable; use Text Styles). See [plugin-api-patterns.md § Text Style Application](../reference/plugin-api-patterns.md#text-style-application).
+**Do not skip any text layer** — each gets a text style or a logged exception. **Never `setBoundVariable` for `fontSize`/`fontWeight`/`lineHeight` on a TextNode** (not bindable there) — bind those on the **Text Style** itself, which does support them and is the preferred form. See [plugin-api-patterns.md § Variable Binding on Text Styles](../reference/plugin-api-patterns.md#variable-binding-on-text-styles--bind-the-style-not-the-textnode).
 
 #### Step 2e: Bind color variables
 
@@ -237,7 +238,7 @@ In a separate `use_figma` call, add properties for **every** qualifying element:
 |---|---|---|
 | Every user-facing text layer | `addComponentProperty("Label", "TEXT", "default")` | `textNode.componentPropertyReferences = { characters: key }` |
 | Every optional element | `addComponentProperty("Show Label", "BOOLEAN", true)` | `node.componentPropertyReferences = { visible: key }` |
-| Every freeform content region | `addComponentProperty("Content", "SLOT", slotNode.id, {})` | native slot (`parent.createSlot()`) — no manual reference needed |
+| Every freeform content region | `parent.createSlot()` — auto-creates the SLOT property | nothing to link; read the key from `slot.componentPropertyReferences.slotContentId` |
 | Every fixed swappable child | `addComponentProperty("Icon", "INSTANCE_SWAP", defaultId)` | `instance.componentPropertyReferences = { mainComponent: key }` |
 
 **Capture every returned key** from `addComponentProperty` and link it immediately. Do NOT add properties without linking them. Property keys have a `#uid` suffix (e.g., `"Label#4:0"`) — never hardcode or guess these keys, as using the wrong key produces **silent failures**.
@@ -378,12 +379,14 @@ When components already exist in Figma:
 
 ## Figma Plugin API Implementation Rules
 
-See [plugin-api-patterns.md](../reference/plugin-api-patterns.md) for the full reference on correct Plugin API usage: sizing (hug vs fixed), text style application, native SLOT vs INSTANCE_SWAP content slots, component composition via instances, and known API constraints.
+See [plugin-api-patterns.md](../reference/plugin-api-patterns.md) for the full reference on correct Plugin API usage: sizing (hug vs fixed), text style application, native SLOT vs INSTANCE_SWAP content regions, component composition via instances, and known API constraints.
 
 All patterns in that file are **mandatory** for this workflow. Key reminders:
 
 - Never call `resize()` on a HUG axis
-- Use `setTextStyleIdAsync()` for typography, not individual variable bindings
-- Content slots must be native SLOT properties (INSTANCE_SWAP for fixed swappable children), never empty frames
+- Use `setTextStyleIdAsync()` for typography; bind font variables on the **Text Style**, not the TextNode
+- Content regions must be SLOT or INSTANCE_SWAP properties, never empty frames — and every slot gets auto-layout
+- Use `figma.createAutoLayout()` for containers of related children, never `createFrame()` + absolute `x`/`y`
+- Add component properties **before** `combineAsVariants` or to the set **after** — never to a variant already inside a set
 - Build in strict tier order — never build a component before its dependencies
-- Keep `use_figma` scripts under ~200 lines — split larger operations
+- At most ~10 logical operations per `use_figma` call — split larger operations

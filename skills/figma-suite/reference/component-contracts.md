@@ -12,8 +12,8 @@ Universal rules for how code components translate to Figma component sets. The a
 | Union type prop (`"primary" \| "secondary"`) | Variant property |
 | Boolean prop (`disabled`, `loading`) | Boolean property |
 | String prop (`label`, `placeholder`) | Text property |
-| ReactNode `children` / content region | Slot property (native `SLOT`) |
-| ReactNode prop (`icon`, `leftSlot`) — fixed swappable | Instance swap property |
+| ReactNode `children` / freeform content region | Slot property (native `SLOT`) |
+| ReactNode prop (`icon`, `avatar`) — specific swappable child | Instance swap property |
 | Size prop (`"sm" \| "md" \| "lg"`) | Variant property (size axis) |
 | State (hover, pressed, focused) | Variant property (state axis) or interactive component state |
 | Conditional rendering | Boolean property toggling layer visibility |
@@ -32,7 +32,7 @@ Read the component's props/interface and extract:
 - **Size unions** → Figma size property
 - **Boolean flags** → Figma boolean properties
 - **String props** → Figma text properties
-- **ReactNode/slot props** → Figma instance swap properties
+- **ReactNode props** → `SLOT` or `INSTANCE_SWAP`, per the [content-region decision table](#content-regions-slot-vs-instance_swap)
 
 ### Step 2: Extract visual specs from styling
 
@@ -81,7 +81,7 @@ Component frame
 ├── gap: bound to spacing variables
 ├── sizing: hug contents (default) — see Sizing Rules below
 ├── children:
-│   ├── Content slot (native SLOT property, or INSTANCE_SWAP fallback — NOT an empty frame)
+│   ├── Content region (SLOT for freeform / INSTANCE_SWAP for a specific child — NOT an empty frame)
 │   ├── Text layer (TEXT property + all 4 typography variables bound)
 │   └── Trailing element (optional)
 ```
@@ -95,14 +95,27 @@ Per component type:
 
 For the API mechanics (the `resize()`-before-modes ordering, FILL-after-append, the HUG-parent constraint), see [plugin-api-patterns.md § Sizing: Hug Contents vs Fixed](../reference/plugin-api-patterns.md#sizing-hug-contents-vs-fixed).
 
-### Content slots: native SLOT (primary), INSTANCE_SWAP (fallback)
+### Content regions: SLOT vs INSTANCE_SWAP
 
-- **Native `SLOT`** for freeform content (Card content, Dialog footer); **INSTANCE_SWAP** to swap a *specific* component (icon, avatar) or as the older-runtime fallback.
-- **Never use a raw Frame as a slot** — consumers can only fill/swap into SLOT or INSTANCE_SWAP properties.
-- For optional slots, pair with a boolean (`Show CTA`).
+**This table is the canonical decision rule.** Every other doc in this skill references it rather than restating it. Decide per region, not per component — one component often needs both.
+
+| The region is… | Property kind | Examples |
+|---|---|---|
+| A **specific swappable child component** — consumer picks *which component*, from a known set | `INSTANCE_SWAP` | Button leading/trailing icon, Avatar, Badge, a chosen CTA button |
+| A **freeform content region** — consumer authors *arbitrary content* | native `SLOT` | Card header / body / footer, Dialog body, BottomSheet content, Popover content |
+| Either of the above, but **optional** | + a `BOOLEAN` toggle | `Show Footer`, `Show Icon` |
+
+A Card with a swappable header icon *and* an authored body needs an `INSTANCE_SWAP` for the icon and a `SLOT` for the body. Getting this backwards is the common failure: an `INSTANCE_SWAP` body forces consumers to pre-build a component for content that should just be typed in, and a `SLOT` for an icon throws away the picker and the `preferredValues` constraint.
+
+**Rules that apply to both:**
+- **Never use a raw Frame as a content region** — consumers can only fill/swap into `SLOT` or `INSTANCE_SWAP` properties.
+- **Always give a slot auto-layout** (`VERTICAL`/`HORIZONTAL`). A slot without it positions dropped content absolutely. `GRID` is rejected by the API on slot nodes — for a grid region, nest a `GRID` frame *inside* the slot ([code](../reference/plugin-api-patterns.md#content-slots-native-slot--not-empty-frames)).
+- Slot names are Title Case and singular: `Content`, `Header`, `Footer`.
 - In `component-mappings/{id}.json`: native slots → `kind: "slot"`, swappable instances → `kind: "instanceSwap"`.
 
-Code for both approaches: [plugin-api-patterns.md § Content Slots](../reference/plugin-api-patterns.md#content-slots-native-slot-primary--not-empty-frames).
+**Divergence from the official Figma skills, stated deliberately:** official `figma-generate-library` predates native Slots and still routes every `children`/ReactNode prop to `INSTANCE_SWAP + BOOLEAN`. We use `SLOT` for freeform regions because it models React `children` accurately, per `figma-use`'s own description of slots as "more flexible than INSTANCE_SWAP." Separately, official docs never pair a `SLOT` with a `BOOLEAN` — the `Show X` pairing is our convention, so verify visibility toggling on a real slot before depending on it.
+
+API mechanics, restrictions, and code for both: [plugin-api-patterns.md § Content Slots](../reference/plugin-api-patterns.md#content-slots-native-slot--not-empty-frames).
 
 ### Variable binding checklist
 
@@ -117,15 +130,15 @@ For every component, bind:
 - [ ] **Typography** → Apply a **Text Style** via `setTextStyleIdAsync()` — see below
 - [ ] **VERIFY** all bindings with `node.boundVariables` after setting
 
-**`fontSize`, `fontWeight`, and `lineHeight` are NOT bindable via `setBoundVariable()` on text nodes.** They must be set through Text Styles. Do NOT attempt individual font property binding — it silently fails.
+**`fontSize`, `fontWeight`, and `lineHeight` are NOT bindable on a TextNode** — bind them on the **Text Style** instead (`style.setBoundVariable("fontSize", var)` works and is preferred), then apply the style to the node.
 
 If no suitable variable exists for a property and creating one doesn't make sense, use a raw value and report it as an exception with a reason. Never silently skip a binding.
 
 ### Text layer: use Text Styles (MUST)
 
-**Always apply a Text Style via `setTextStyleIdAsync()`** — individual `setBoundVariable` font bindings do NOT work in headless `use_figma`. Build order per text layer: (1) `loadFontAsync` (probe style names first), (2) set `fontName`, (3) set `characters`, (4) `setTextStyleIdAsync(styleId)`, (5) bind the text fill color separately. Verify: `text.textStyleId` starts with `"S:"`.
+**Always apply a Text Style via `setTextStyleIdAsync()`.** Build order per text layer: (1) `loadFontAsync` with a style name verified via `listAvailableFontsAsync()`, (2) set `fontName`, (3) set `characters`, (4) `setTextStyleIdAsync(styleId)`, (5) bind the text fill color separately. Verify: `text.textStyleId` starts with `"S:"`.
 
-Full sequence + font-style probing: [plugin-api-patterns.md § Text Style Application](../reference/plugin-api-patterns.md#text-style-application).
+Full sequence + variable binding on styles: [plugin-api-patterns.md § Text Style Application](../reference/plugin-api-patterns.md#text-style-application).
 
 ### Variable modes on components
 
@@ -217,10 +230,13 @@ Run this script via `use_figma` after creating or modifying any component. It wa
 - SOLID fills and strokes → must be variable-bound
 - Corner radius → must be variable-bound
 - Padding and gap on auto-layout frames → must be variable-bound
-- Text layers → must have a Text Style applied (NOT individual font bindings — `fontSize`, `fontWeight`, `lineHeight` are NOT bindable via `setBoundVariable`)
+- Text layers → must have a Text Style applied (bind variables on the *style*, not on the TextNode — `fontSize`/`fontWeight`/`lineHeight` are not bindable on a TextNode)
 - Text layers → must have fill variable-bound
 - Text layers → must be linked to a TEXT component property
 - Instance nodes → must be linked to an INSTANCE_SWAP component property
+- Slot nodes → must be linked to a SLOT component property via `slotContentId`
+- Slot nodes → must have auto-layout, and must not use `GRID`
+- Every `SLOT` entry in `componentPropertyDefinitions` → must resolve to a live SlotNode
 
 ```javascript
 const nodeId = "COMPONENT_OR_SET_ID"; // replace with actual ID
@@ -271,10 +287,10 @@ for (const variant of variants) {
 
     // Check text layers
     if (node.type === "TEXT") {
-      // Text Style applied? (NOT individual font bindings — they don't work in headless)
+      // Text Style applied? (bind font variables on the STYLE, not on the TextNode)
       const hasStyle = typeof node.textStyleId === "string" && node.textStyleId.startsWith("S:");
       if (!hasStyle) {
-        violations.push(`${path}: no Text Style applied (do NOT use setBoundVariable for font properties)`);
+        violations.push(`${path}: no Text Style applied (font props are not bindable on a TextNode)`);
       }
 
       // Text fill variable-bound?
@@ -296,6 +312,34 @@ for (const variant of variants) {
         violations.push(`${path}: instance not linked to INSTANCE_SWAP property`);
       }
     }
+
+    // Check slots are wired and have auto-layout
+    if (node.type === "SLOT") {
+      const refs = node.componentPropertyReferences || {};
+      if (!refs.slotContentId) {
+        violations.push(`${path}: slot not linked to a SLOT property (missing slotContentId)`);
+      }
+      if (!node.layoutMode || node.layoutMode === "NONE") {
+        violations.push(`${path}: slot has no auto-layout — dropped content will position absolutely`);
+      }
+      if (node.layoutMode === "GRID") {
+        violations.push(`${path}: GRID layoutMode is not allowed on slot nodes`);
+      }
+    }
+  }
+}
+
+// Every declared SLOT property must resolve to a live SlotNode.
+// Read definitions from `root` only — they throw on a variant inside a set.
+const defs = root.componentPropertyDefinitions || {};
+const wiredKeys = new Set(
+  root.findAllWithCriteria({ types: ["SLOT"] })
+    .map(s => (s.componentPropertyReferences || {}).slotContentId)
+    .filter(Boolean)
+);
+for (const [key, def] of Object.entries(defs)) {
+  if (def.type === "SLOT" && !wiredKeys.has(key)) {
+    violations.push(`${root.name}: SLOT property "${key}" has no SlotNode wired to it`);
   }
 }
 
@@ -306,6 +350,8 @@ return {
   hasMoreViolations: violations.length > 30
 };
 ```
+
+> **Why the definitions check sits outside the per-variant loop:** `componentPropertyDefinitions` throws on a component that is already a variant inside a set (`"Can only get/set component property definitions of a component set or non-variant component"`). Read it from `root` — the set, or a standalone component. See [plugin-api-patterns.md § Component Property Timing](../reference/plugin-api-patterns.md#component-property-timing-before-or-after-combineasvariants).
 
 **How to use the output:**
 

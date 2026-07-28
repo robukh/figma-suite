@@ -171,7 +171,7 @@ Apply order: collections/modes → primitives → semantic aliases → value upd
 
 ### Components
 
-**To Figma:** add/adjust component properties via `use_figma` per the component-creation rules in [component-contracts.md](../reference/component-contracts.md) and [build-library.md](build-library.md) (native `SLOT` for content slots, INSTANCE_SWAP fallback; capture `#uid` keys from `addComponentProperty`; bind variables; verify with the verification script). Screenshot-validate after visual changes.
+**To Figma:** add/adjust component properties via `use_figma` per the component-creation rules in [component-contracts.md](../reference/component-contracts.md) and [build-library.md](build-library.md) (content regions per the [decision table](../reference/component-contracts.md#content-regions-slot-vs-instance_swap) — `SLOT` for freeform, `INSTANCE_SWAP` for a specific child; capture `#uid` keys from `addComponentProperty`; bind variables; verify with the verification script). Screenshot-validate after visual changes.
 
 **To code:** follow `code-rules.md` — add the prop/union member, translate values via `propertyMap.values`. Never invent a code prop with no Figma correspondence; never expect code for a `figma-only` component.
 

@@ -138,7 +138,7 @@ The collections pattern is determined by the naming convention preset (see [nami
 
 📦 Semantic (N modes: "Light", "Dark", etc.)
    ├── {role-name}              ← aliases into Primitives, different per mode
-   └── scope: ["FILL_COLOR", "STROKE_COLOR"]
+   └── scope: ["FRAME_FILL", "SHAPE_FILL"] (surfaces) / ["TEXT_FILL"] (text) / ["STROKE_COLOR"] (borders)
 
 📦 Typography (1 mode: "Value")
    ├── font-family/
@@ -183,7 +183,7 @@ Frame: "Screen Name" ({frameWidth} x {frameHeight} from config)
 
 ## Slots Note
 
-Figma's native **Slots** are **GA since 2026-06-10** and creatable via the Plugin API (`ComponentNode.createSlot()`, `addComponentProperty(name, "SLOT", ...)`). Use native `SLOT` for freeform content regions; use **INSTANCE_SWAP** for swapping a specific component (icon, avatar) or as a fallback on older runtimes. See [plugin-api-patterns.md](plugin-api-patterns.md) and [component-contracts.md](component-contracts.md).
+Figma's native **Slots** are creatable via the Plugin API — `ComponentNode.createSlot()` returns a `SlotNode` and auto-wires the `SLOT` component property. Use `SLOT` for freeform content regions and `INSTANCE_SWAP` for a specific swappable child; decide per region using the canonical table in [component-contracts.md § Content regions](component-contracts.md#content-regions-slot-vs-instance_swap). API mechanics and restrictions: [plugin-api-patterns.md § Content Slots](plugin-api-patterns.md#content-slots-native-slot--not-empty-frames).
 
 ---
 
@@ -233,4 +233,5 @@ Universal rules regardless of preset:
 - [ ] Screen frames use platform preset dimensions
 - [ ] Auto-layout used throughout (no absolute positioning except where intentional)
 - [ ] Light/dark modes both represented (per chosen strategy)
-- [ ] Native SLOT (or INSTANCE_SWAP fallback) used for all content slots
+- [ ] Every content region is a SLOT (freeform) or INSTANCE_SWAP (specific child) — never a raw frame
+- [ ] Every SLOT node has auto-layout (not `NONE`, not `GRID`)

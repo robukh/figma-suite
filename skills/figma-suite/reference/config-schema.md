@@ -1,10 +1,17 @@
 # Config Schema
 
-Single source of truth for the project config file structure. All workflows read config from `<HOME>/.claude/figma-suite/{project-name}/config.json`.
+Single source of truth for the project config file structure. Config lives in the workspace folder, whose location the user picks during setup:
+
+| Workspace location | Config path |
+|---|---|
+| **Project-level** (default inside a project) | `{project-root}/.figma-suite/config.json` |
+| **Global** (personal, or standalone with no codebase) | `<HOME>/.claude/figma-suite/{project-name}/config.json` |
 
 - `<HOME>` — the user's home directory (`~` on macOS/Linux, `%USERPROFILE%` on Windows). Always resolve to the absolute path at runtime.
 
-The workspace folder is named by the project name (kebab-cased), not by a Figma file key — because a project may span multiple Figma files.
+Workflows resolve the workspace via the discovery order in [SKILL.md § Auto-discovery order](../SKILL.md#auto-discovery-order-workspace): project-level first, then global matching `projectPath`.
+
+A global workspace folder is named by the project name (kebab-cased), not by a Figma file key — because a project may span multiple Figma files.
 
 ---
 

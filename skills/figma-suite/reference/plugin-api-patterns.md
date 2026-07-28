@@ -2,7 +2,18 @@
 
 These rules encode correct Plugin API usage patterns for `use_figma` MCP calls. Violating them produces components that look right in screenshots but are broken for consumers — or causes silent failures that are hard to debug.
 
-Based on the [official Figma MCP server guide](https://github.com/figma/mcp-server-guide/tree/main/skills/figma-use).
+Aligned against the official Figma skills. **The authoritative source is the live MCP resource** — the GitHub mirror can lag. Read these before assuming this file is current:
+
+| Topic | Resource URI |
+|---|---|
+| Core rules, efficient APIs, page rules | `skill://figma/figma-use/SKILL.md` |
+| Components, variants, **slots**, instances | `skill://figma/figma-use/references/component-patterns.md` |
+| Gotchas and failure modes | `skill://figma/figma-use/references/gotchas.md` |
+| Variables, collections, modes, scopes | `skill://figma/figma-use/references/variable-patterns.md` |
+| Text styles + variable binding on styles | `skill://figma/figma-use/references/working-with-design-systems/wwds-text-styles.md` |
+| Supported / unsupported API surface | `skill://figma/figma-use/references/api-reference.md` |
+
+Mirror: [figma/mcp-server-guide](https://github.com/figma/mcp-server-guide/tree/main/skills/figma-use). Where the official docs contradict each other (component-property timing, `teamLibrary` support), this file says so explicitly rather than picking silently.
 
 The terse master list of every constraint is **[Known API Constraints](#known-api-constraints)** at the bottom — scan it before each `use_figma` call. The sections below explain each in full.
 
@@ -68,13 +79,31 @@ figma.currentPage = targetPage; // Error!
 
 **If your workflow spans multiple `use_figma` calls** and targets a non-default page, call `await figma.setCurrentPageAsync(page)` at the start of **each** call.
 
-**To iterate all pages:**
+### One page switch per script — fan out, never loop
+
+**A single script must call `setCurrentPageAsync` at most once.** Looping over `figma.root.children` and switching pages inside the loop reloads the file on every iteration and is the top cause of slow, timing-out scripts.
+
 ```javascript
+// WRONG — switches pages N times in one script
 for (const page of figma.root.children) {
   await figma.setCurrentPageAsync(page);
-  // page.children is now loaded — read or modify them here
+  // ...
 }
+
+// CORRECT — step 1: cheap read-only discovery call, no page switch
+return figma.root.children.map(p => ({ id: p.id, name: p.name }));
 ```
+
+Then **step 2: emit N `use_figma` calls, one per target page, each switching once.** For read-only work these go out **in parallel — all N tool calls in a single message.** For writes they stay strictly sequential (see below).
+
+```javascript
+// One of the N calls — switches exactly once
+const page = await figma.getNodeByIdAsync("PAGE_ID");
+await figma.setCurrentPageAsync(page);
+return page.findAllWithCriteria({ types: ["COMPONENT_SET"] }).map(n => ({ id: n.id, name: n.name }));
+```
+
+**Reads fan out; writes do not.** Multi-page *discovery* should be parallel. Multi-page *mutation* must remain one call at a time — see [SKILL.md § Sequential Figma writes; parallel reads](../SKILL.md#sequential-figma-writes-parallel-reads). The only reason to switch pages twice in one script is a genuine atomicity requirement; "it's read-only" and "I want a consistent snapshot" do not qualify.
 
 ---
 
@@ -87,36 +116,116 @@ These throw errors in `use_figma` headless runtime:
 | `figma.notify()` | "not implemented" | Use `return` for output |
 | `figma.currentPage = page` (sync setter) | "not supported" | `await figma.setCurrentPageAsync(page)` |
 | `getPluginData()` / `setPluginData()` | Not supported | `getSharedPluginData()` / `setSharedPluginData()` with namespace |
-| `TextStyle.setBoundVariable()` | "not a function" in headless | Set raw values on the style; bind variables interactively in Figma UI later |
+| `figma.loadAllPagesAsync()` | Not implemented | Enumerate `figma.root.children` and fan out one call per page |
+| `figma.createImage()` / `createImageAsync()` | Unsupported, being removed | `upload_assets` — the only supported image path (`use_figma` has no network access) |
+| `figma.getLocalComponents*()` | Does not exist | `page.findAllWithCriteria({ types: ["COMPONENT", "COMPONENT_SET"] })` |
+| `figma.teamLibrary.*` | Unreliable / not implemented | `importVariableByKeyAsync` / `importComponentByKeyAsync` |
+| `figma.createPage()` | Design files only | Throws in FigJam and Slides |
 
-### TextStyle.setBoundVariable Limitation
+### Variable Binding on Text Styles — bind the STYLE, not the TextNode
 
-**`setBoundVariable` on TextStyle objects does NOT work in headless `use_figma`.** When creating text styles, set raw values instead:
+This is a two-level rule that is easy to get backwards:
+
+| Target | `setBoundVariable` | Do this |
+|---|---|---|
+| **TextStyle** | ✅ **Works — and is preferred** | Bind `fontFamily`, `fontSize`, `fontStyle`, `fontWeight`, `letterSpacing`, `lineHeight`, `paragraphSpacing`, `paragraphIndent` |
+| **TextNode** | ❌ `fontSize`/`fontWeight`/`lineHeight` are not bindable | Apply a Text Style with `setTextStyleIdAsync()` |
 
 ```javascript
-// This works — raw values
 const style = figma.createTextStyle();
 style.name = "Body / Bold";
 await figma.loadFontAsync({ family: "Inter", style: "Bold" });
 style.fontName = { family: "Inter", style: "Bold" };
+
+// PREFERRED — bind to variables where they exist
+style.setBoundVariable("fontSize", fontSizeVar);
+style.setBoundVariable("lineHeight", lineHeightVar);
+style.setBoundVariable("letterSpacing", trackingVar);
+
+// Fallback only where no variable exists — raw values
 style.fontSize = 17;
 style.lineHeight = { unit: "PIXELS", value: 26 };
-style.letterSpacing = { value: 0, unit: "PERCENT" };
 
-// This FAILS in headless — throws "not a function"
-// style.setBoundVariable("fontSize", fontSizeVar);
-
-// Apply the style to text nodes — this DOES work
+// Apply to nodes
 await textNode.setTextStyleIdAsync(style.id);
 ```
 
-Variable binding on text styles must be done interactively in the Figma UI after the automated build, or the text style values will simply use their raw values (which is fine for most use cases).
+Unbind with `style.setBoundVariable(field, null)`. Setting `textStyleId` on a node does **not** require the font to be loaded — only editing text content or font properties directly does.
+
+---
+
+## Efficient APIs — prefer these over verbose alternatives
+
+The `use_figma` sandbox exposes helpers that are not in the vanilla Plugin API. They cut script size sharply, which matters against the per-call operation budget.
+
+**`figma.createAutoLayout(direction?, props?)`** — **prefer over `createFrame()`** for any container holding related children:
+
+```javascript
+const row = figma.createAutoLayout("HORIZONTAL", { itemSpacing: 8, paddingLeft: 16 });
+```
+
+**`node.set(props)`** — batch setter, chainable. `layoutMode` is always applied first regardless of key order, and `width`/`height` route through `resize()`:
+
+```javascript
+card.set({ layoutMode: "VERTICAL", itemSpacing: 12, width: 320, cornerRadius: 8 });
+```
+
+**`node.query(selector)`** — CSS-like search within a subtree, with combinators (`>`, ` `, `+`, `~`), pseudo-classes (`:first-child`, `:nth-child(n)`, `:not()`, `:is()`), and dot-path attributes:
+
+```javascript
+frame.query("FRAME > TEXT[fills.0.type=SOLID]").set({ opacity: 0.6 });
+figma.currentPage.query("INSTANCE[mainComponent.name=Button]").first();
+```
+
+`QueryResult` supports `.first() .last() .toArray() .each() .map() .filter() .values(keys) .set(props) .query()` and `for...of`. There is **no global `figma.query()`** — scope it to a node.
+
+**`await node.screenshot(opts?)`** — returns a PNG inline in the tool response. Cheaper than a separate `get_screenshot` round-trip for mid-build checks. Defaults to 0.5× capped at 1024px.
+
+**`node.placeholder`** — shimmer overlay during a long build. **Always clear it when done.**
+
+---
+
+## Traversal and Performance
+
+**Use `findAllWithCriteria({ types: [...] })` — not `findAll(predicate)`.** The criteria API is index-backed and hundreds of times faster. When the predicate mixes type with a non-indexed attribute, use criteria for the type and `.find()`/`.filter()` for the rest:
+
+```javascript
+// WRONG — walks every node
+const slot = instance.findOne(n => n.type === "SLOT" && n.name === "Content");
+
+// CORRECT — type-indexed, then narrow
+const slot = instance.findAllWithCriteria({ types: ["SLOT"] }).find(n => n.name === "Content");
+```
+
+`types` is an array — pass all the types you need in one call rather than issuing several. *Caveat:* if you would have to list ~10+ types just to use criteria, plain `findAll(() => true)` is shorter and equivalently fast on a screen-sized subtree.
+
+**Scope traversal to the smallest known ancestor.**
+
+| Call | Cost |
+|---|---|
+| `someFrame.findAllWithCriteria(...)` | one frame's subtree |
+| `figma.currentPage.findAllWithCriteria(...)` | one page |
+| `figma.root.findAll(...)` | **every loaded page — never do this** |
+
+**Batch independent awaits with `Promise.all`.** Sequential `import*ByKeyAsync` calls at the top of a script, and per-variable loads inside a loop, are the common offenders:
+
+```javascript
+// WRONG — one IPC round-trip per item
+for (const key of keys) { comps.push(await figma.importComponentByKeyAsync(key)); }
+
+// CORRECT
+const comps = await Promise.all(keys.map(k => figma.importComponentByKeyAsync(k)));
+```
+
+The only awaits that must stay sequential are `setCurrentPageAsync` and genuine per-iteration dependencies.
 
 ---
 
 ## Incremental Workflow
 
 The most common cause of bugs is trying to do too much in a single `use_figma` call. **Work in small steps and validate after each one.**
+
+**At most ~10 logical operations per call.** A "logical operation" is creating a node, setting its properties, and parenting it. Creating 20 nodes means splitting across 2–3 calls.
 
 1. **Inspect first** — run a read-only `use_figma` to discover what exists (pages, components, variables, naming conventions)
 2. **Do one thing per call** — create variables in one call, components in the next, layouts in another
@@ -161,7 +270,7 @@ The most common cause of bugs is trying to do too much in a single `use_figma` c
 | Color value out of range | Used 0–255 instead of 0–1 | Divide by 255 |
 | `"Cannot read properties of null"` | Wrong node ID or wrong page | Check page context, verify ID |
 | `"fills and strokes variable bindings must be set on paints directly"` | Used `setBoundVariable` on node | Use `setBoundVariableForPaint` on paint object |
-| `"not a function"` on TextStyle | `setBoundVariable` unsupported in headless | Set raw values instead |
+| `"not a function"` / silent no-op binding a font prop | Called `setBoundVariable` on the **TextNode** | Bind on the **TextStyle**, then `setTextStyleIdAsync()` |
 
 ---
 
@@ -175,16 +284,57 @@ comp.layoutSizingVertical = "HUG";
 comp.resize(320, 100); // resets vertical to FIXED!
 
 // CORRECT — resize first, then set modes
-comp.resize(320, 1); // width matters, height is throwaway
+comp.resize(320, 100);
 comp.layoutSizingHorizontal = "FIXED";
 comp.layoutSizingVertical = "HUG";
 ```
 
-**Rule:** `layoutSizingHorizontal/Vertical = 'FILL'` MUST be set AFTER `parent.appendChild(child)` — setting before append throws.
+**Never pass a throwaway value (`1`, `0`) to `resize()` on an axis you intend to HUG.** If the `HUG` then fails to apply — a very common outcome, see the value rules below — you are left with a 1px-tall frame and a layout that looks catastrophically broken for a non-obvious reason. Pass a plausible height; `HUG` will recompute it.
 
-**Rule:** A `HUG` parent cannot give `FILL` children meaningful space. Parent must be `FIXED` or `FILL` for children to expand.
+### `HUG` and `FILL` are value-restricted — `FIXED` always works
 
-**Rule:** `counterAxisAlignItems` does NOT accept `'STRETCH'`. Use `'MIN'` and set children to `layoutSizingX = 'FILL'` on the cross axis instead.
+The property exists on every `SceneNode`; what fails is the *value*.
+
+| Value | Allowed when | Typical error |
+|---|---|---|
+| `'FIXED'` | always | never throws |
+| `'HUG'` | the node **is** an auto-layout frame, **or** is a **TEXT** child of one | `"HUG can only be set on auto-layout frames or text children of auto-layout frames"` |
+| `'FILL'` | the node is a child of an auto-layout frame, and is not absolute-positioned, not inside an immutable frame, not a canvas-grid child | `"FILL can only be set on children of auto-layout frames"` |
+
+Consequences:
+- **Append first, then set.** A newly created or unparented node cannot satisfy the rule yet.
+- **`'HUG'` on a non-text child of auto-layout still throws.** To shrink a non-text child to its content, set its own `primaryAxisSizingMode`/`counterAxisSizingMode` to `'AUTO'` instead.
+
+### Don't cross the two sizing enums
+
+| Property | Valid values | Set on |
+|---|---|---|
+| `layoutSizingHorizontal` / `layoutSizingVertical` | `'FIXED' \| 'HUG' \| 'FILL'` | the **child** (or the auto-layout frame itself) |
+| `primaryAxisSizingMode` / `counterAxisSizingMode` | `'FIXED' \| 'AUTO'` | the **frame** itself |
+
+`layoutSizingVertical = 'AUTO'` is invalid (use `'HUG'`); `counterAxisSizingMode = 'FILL'` throws `Expected 'FIXED' | 'AUTO', received 'FILL'`.
+
+### Other sizing rules
+
+- `layoutSizingHorizontal/Vertical = 'FILL'` MUST be set AFTER `parent.appendChild(child)`.
+- A `HUG` parent cannot give `FILL` children meaningful space — the parent must be `FIXED` or `FILL`. This is a frequent cause of truncated text in inputs, selects, and action rows.
+- `layoutGrow` on a child of a hugging parent **compresses** it below its natural size instead of expanding it.
+- `counterAxisAlignItems` does NOT accept `'STRETCH'`. Use `'MIN'` plus `layoutSizing* = 'FILL'` on the children.
+- `width` and `height` are **read-only** — assigning throws `"no setter for property"`. Use `resize()`. (`x` and `y` *are* writable.)
+- Sections and component sets: use `resizeWithoutConstraints()`.
+
+### Wrapping text collapses under `FILL`
+
+A TEXT node defaults to `textAutoResize = 'WIDTH_AND_HEIGHT'`, which **ignores `FILL`** — the node collapses to a few pixels wide and thousands tall (a "text thread").
+
+```javascript
+// CORRECT — set autoresize and an explicit width BEFORE assigning characters
+t.textAutoResize = "HEIGHT";      // grow vertically, wrap at a fixed width
+t.layoutSizingHorizontal = "FIXED";
+t.resize(852, t.height);          // e.g. parent 900 − 24 padding × 2
+t.characters = longString;
+if (t.width === 0) throw new Error("text collapsed — width not applied");
+```
 
 ---
 
@@ -223,22 +373,33 @@ style.letterSpacing = { value: 0, unit: "PERCENT" };
 style.lineHeight = { unit: "AUTO" };
 ```
 
-### Font Style Probing
+### Font Style Discovery — list, never probe
 
-Font style names vary by provider and file ("SemiBold" vs "Semi Bold"). **Probe available styles** before hardcoding:
+Font style names vary by provider and file (`"SemiBold"` vs `"Semi Bold"` is the classic footgun). **Discover the exact string with `listAvailableFontsAsync()`** — do not probe with try/catch:
 
 ```javascript
-const candidates = ["Bold", "SemiBold", "Semi Bold", "700"];
-let loadedStyle = null;
-for (const style of candidates) {
-  try {
-    await figma.loadFontAsync({ family: "Inter", style });
-    loadedStyle = style;
-    break;
-  } catch {}
-}
-if (!loadedStyle) throw new Error("No bold variant found for Inter");
+// CORRECT — query the real list once, then match
+const fonts = await figma.listAvailableFontsAsync();
+const interStyles = fonts
+  .filter(f => f.fontName.family === "Inter")
+  .map(f => f.fontName.style);
+
+const bold = ["Bold", "SemiBold", "Semi Bold"].find(s => interStyles.includes(s));
+if (!bold) throw new Error(`No bold variant for Inter. Available: ${interStyles.join(", ")}`);
+await figma.loadFontAsync({ family: "Inter", style: bold });
+
+// WRONG — try/catch probing: slow, and swallows real errors
+// for (const s of candidates) { try { await figma.loadFontAsync(...) } catch {} }
 ```
+
+When **mutating existing** text, load the node's own fonts rather than a hardcoded default:
+
+```javascript
+const segments = textNode.getStyledTextSegments(["fontName"]);
+await Promise.all(segments.map(s => figma.loadFontAsync(s.fontName)));
+```
+
+Font loading is required for more than `characters` — `appendChild`, `insertChild`, `setBoundVariable`, `setValueForMode`, `setExplicitVariableModeForCollection`, and `findAll` callbacks that touch text all throw on unloaded fonts. Inter is preloaded in most environments, so this bug usually surfaces first with a brand font.
 
 ---
 
@@ -338,6 +499,21 @@ const radius = figma.variables.createVariable("radius-lg", collection, "FLOAT");
 radius.scopes = ["CORNER_RADIUS"];
 ```
 
+**The complete valid scope enum.** Anything outside this list throws — notably there is no `FILL_COLOR`:
+
+```
+ALL_SCOPES
+TEXT_CONTENT
+CORNER_RADIUS      WIDTH_HEIGHT      GAP
+ALL_FILLS          FRAME_FILL        SHAPE_FILL       TEXT_FILL
+STROKE_COLOR       STROKE_FLOAT
+EFFECT_FLOAT       EFFECT_COLOR      OPACITY
+FONT_FAMILY        FONT_STYLE        FONT_WEIGHT      FONT_SIZE
+LINE_HEIGHT        LETTER_SPACING    PARAGRAPH_SPACING PARAGRAPH_INDENT
+```
+
+Match the file's existing scope conventions before inventing your own — check what local variables already use.
+
 ### Variable Collection Default Mode
 
 New collections start with one default mode named **"Mode 1"**. Rename it — don't try to add a first mode:
@@ -349,6 +525,48 @@ collection.renameMode(collection.modes[0].modeId, "Light");
 // Now add additional modes
 collection.addMode("Dark");
 ```
+
+Never leave a mode named `"Mode 1"`. Single-mode collections use `"Value"` or `"Default"`; multi-mode collections take their names from the source (`Light`/`Dark`, `Desktop`/`Tablet`/`Mobile`).
+
+**Mode limits are plan-dependent** — exceeding them throws or fails silently:
+
+| Plan | Modes per collection |
+|---|---|
+| Free | 1 (no `addMode`) |
+| Professional | up to 4 |
+| Organization / Enterprise | 40+ |
+
+If a token set needs more modes than the plan allows, split it across multiple collections.
+
+### Duplicate variable names do NOT error
+
+Figma silently creates a **second variable with the same name**. Always check before creating:
+
+```javascript
+const existing = (await figma.variables.getLocalVariablesAsync())
+  .find(v => v.name === name && v.variableCollectionId === collection.id);
+const variable = existing ?? figma.variables.createVariable(name, collection, "COLOR");
+```
+
+### Aliasing rules
+
+`setValueForMode` requires the alias shape exactly — any deviation silently sets the wrong value or throws:
+
+```javascript
+semanticVar.setValueForMode(modeId, { type: "VARIABLE_ALIAS", id: primitiveVar.id });
+```
+
+**Cross-file aliasing is not supported.** To alias a library variable, `importVariableByKeyAsync` it into the file first. A variable with `remote === true` came from a library; `remote === false` is local.
+
+**COLOR variable values use `{r, g, b, a}`** — but paint `color` objects must be `{r, g, b}` with **no** `a` (paint opacity goes at the paint level). Mixing them up throws `Unrecognized key(s) in object: 'a'`.
+
+### Async and deprecated forms
+
+- All sync variable getters are deprecated — use `getVariableByIdAsync`, `getLocalVariablesAsync`, `getVariableCollectionByIdAsync`, `getLocalVariableCollectionsAsync`.
+- `getLocalTextStyles()` is deprecated — use `getLocalTextStylesAsync()`.
+- `createVariable(name, collection, type)` — pass the **collection object**; the ID-string form is deprecated.
+- `setBoundVariableForEffect` and `setBoundVariableForLayoutGrid` return **new** objects, exactly like `setBoundVariableForPaint` — capture and reassign.
+- Shadows cannot be variables. Use effect styles (`figma.createEffectStyle()`), then bind the effect's `color`/`radius`/`spread`/`offsetX`/`offsetY` fields.
 
 ### Variable Modes on Components
 
@@ -362,17 +580,29 @@ Without this call, dark mode variants and alternative themes will render using t
 
 ---
 
-## Font Property Binding Limitation
+## Font Property Binding on TextNodes
 
-**`fontSize`, `fontWeight`, and `lineHeight` are NOT bindable via `setBoundVariable()` on text nodes.** Attempting this silently fails — the binding appears to succeed but has no effect.
+**`fontSize`, `fontWeight`, and `lineHeight` are NOT bindable via `setBoundVariable()` on a text *node*.** Attempting this silently fails — the binding appears to succeed but has no effect.
 
-Typography MUST be applied through **Text Styles** (`setTextStyleIdAsync`). Text Styles carry font family, size, weight, and line height as a single unit. See the Text Style Application section above.
-
-Additionally, **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** (throws "not a function"). Create Text Styles with raw values; variable binding on styles must be done interactively in the Figma UI.
+Typography is applied through **Text Styles** (`setTextStyleIdAsync`), which carry family, size, weight, and line height as a single unit. Bind the variables on the **style** — that *does* work and is preferred. See [§ Variable Binding on Text Styles](#variable-binding-on-text-styles--bind-the-style-not-the-textnode).
 
 ---
 
-## Node Positioning
+## Node Positioning and Auto-Layout
+
+**Use auto-layout for any container holding structurally related children.** Absolute `x`/`y` governs where a container sits on the canvas; auto-layout governs how its children relate inside it. Skipping the container leaves nothing to protect the layout against text reflow, content changes, or overlap.
+
+```javascript
+// WRONG — children pinned by absolute coordinates
+const card = figma.createFrame();
+title.x = 16; title.y = 16;
+body.x = 16;  body.y = 48;
+
+// CORRECT — children related by auto-layout
+const card = figma.createAutoLayout("VERTICAL", { itemSpacing: 12, paddingTop: 16 });
+card.appendChild(title);
+card.appendChild(body);
+```
 
 **New top-level nodes default to position (0,0).** Multiple nodes created via `figma.create*()` will stack on top of each other. Scan the page and position new nodes away from existing content:
 
@@ -409,7 +639,24 @@ iconInstance.componentPropertyReferences = {
 };
 ```
 
-**Add component properties BEFORE `combineAsVariants`.** After combining, the component set inherits all properties from its children.
+### Component Property Timing: before or after `combineAsVariants`
+
+**Both paths work. The one hard constraint is that a variant already inside a set rejects them.**
+
+```
+comp.addComponentProperty(...)          → OK on a standalone COMPONENT
+componentSet.addComponentProperty(...)  → OK on a COMPONENT_SET
+variant.addComponentProperty(...)       → THROWS
+```
+
+The error: `"Can only get/set component property definitions of a component set or non-variant component"`. The same applies to reading `componentPropertyDefinitions`.
+
+So pick one:
+
+- **Before combining** — add properties to each `ComponentNode` while it is still standalone; the set inherits them from its children. (This is what official `figma-use` prescribes.)
+- **After combining** — add properties to the `ComponentSetNode` itself, then wire `componentPropertyReferences` on the child nodes inside each variant. (This is what official `figma-generate-library` prescribes, and what our [build-library](../workflows/build-library.md) Phase 3 does.)
+
+What you must never do is reach into `componentSet.children[i]` and call `addComponentProperty` on it. Note that `componentPropertyReferences` is set on the **child node** that the property drives — that is a different API and works on nodes inside a variant.
 
 ### Re-running `addComponentProperty` after an interruption creates a duplicate
 
@@ -475,49 +722,139 @@ for (const child of btnSet.children) {
 
 ---
 
-## Content Slots: native SLOT (primary) — NOT empty frames
+## Content Slots: native SLOT — NOT empty frames
 
-**Content slots must be real component properties, not empty frames.** Native **Slots** are GA as of 2026-06-10 (`createSlot()` → `SlotNode`; `addComponentProperty(name, "SLOT", defaultValue, { slotSettings })`).
+**Content regions must be real component properties, not empty frames.** A native slot is a `SlotNode` (type `'SLOT'`) plus a `SLOT`-typed component property — a designated drop zone where consumers place arbitrary content in instances.
 
-**Decision guide:**
-- **Native `SLOT`** — freeform content regions (Card content, Dialog body, BottomSheet content). Closest to React `children`. Use by default.
-- **`INSTANCE_SWAP`** — swap a *specific* component (icon, avatar, a chosen button). Also the fallback on older runtimes.
+Which kind to use for which region: [component-contracts.md § Content regions](component-contracts.md#content-regions-slot-vs-instance_swap) is the canonical decision table. In short — freeform region → `SLOT`; a *specific* swappable child component → `INSTANCE_SWAP`.
 
-### Native SLOT (primary)
+### Preferred — `component.createSlot()`
 
-```javascript
-// Create a native slot inside the component — freeform content region
-const comp = figma.createComponent();
-const slotNode = comp.createSlot();          // returns a SlotNode
-comp.appendChild(slotNode);                  // place in the auto-layout flow
-slotNode.layoutSizingHorizontal = "FILL";    // after append
-
-// Register as a SLOT component property (optional slotSettings)
-const slotKey = comp.addComponentProperty("Content", "SLOT", slotNode.id, {});
-```
-
-Consumers can drop any content into a native slot — closer to the React `children` model than INSTANCE_SWAP. Map these to `kind: "slot"` in the component's `component-mappings/{id}.json`.
-
-### INSTANCE_SWAP (fallback / fixed swappable component)
-
-Use when you want consumers to swap a *specific* component (an icon set, an avatar) rather than freeform content — or on a runtime without Slots:
+`createSlot()` creates the SlotNode **as a direct child of the component** and **auto-creates the linked `SLOT` component property**. There is no `appendChild` and no `addComponentProperty` to follow it.
 
 ```javascript
-// Create placeholder component for default slot value
-const placeholder = figma.createComponent();
-placeholder.name = "_Slot Placeholder";
-placeholder.resize(100, 40);
-placeholder.fills = [];
+const card = figma.createComponent();
+card.name = "Card";
+card.layoutMode = "VERTICAL";
+card.primaryAxisSizingMode = "AUTO";
+card.counterAxisSizingMode = "FIXED";
+card.resize(320, 100);
 
-// Instance it inside the parent
-const slot = placeholder.createInstance();
-parent.appendChild(slot);
-slot.layoutSizingHorizontal = "FILL";
+const contentSlot = card.createSlot();   // SlotNode, already parented
+contentSlot.name = "Content";
+contentSlot.layoutMode = "VERTICAL";     // GRID is NOT allowed on slots
+contentSlot.resize(320, 200);            // resize BEFORE sizing modes
 
-// Register as INSTANCE_SWAP property
-const slotKey = parent.addComponentProperty("Content", "INSTANCE_SWAP", placeholder.id);
-slot.componentPropertyReferences = { mainComponent: slotKey };
+// The auto-created property key lives on the slot's own references
+const slotKey = contentSlot.componentPropertyReferences["slotContentId"];  // "Content#7:1"
 ```
+
+Each `createSlot()` call produces a separate slot and its own property:
+
+```javascript
+const header = card.createSlot(); header.name = "Header";
+const body   = card.createSlot(); body.name   = "Content";
+const footer = card.createSlot(); footer.name = "Footer";
+
+return Object.keys(card.componentPropertyDefinitions);
+// → ["Header#7:1", "Content#7:2", "Footer#7:3"]
+```
+
+**Always give a slot auto-layout.** A slot is a layout container: set `layoutMode` (`VERTICAL`/`HORIZONTAL`), call `resize()` before setting sizing modes, and set `FILL`/`HUG` only once it is parented (it already is, straight out of `createSlot()`). A slot left at `layoutMode: "NONE"` positions whatever a consumer drops in absolutely, which defeats the point.
+
+**`GRID` is rejected on a slot node — this is an API restriction, not a style preference.** Figma throws; there is no design context in which it works. When a region genuinely needs grid arrangement, nest the grid rather than making the slot itself one:
+
+```javascript
+// WRONG — throws
+const gallery = card.createSlot();
+gallery.layoutMode = "GRID";
+
+// CORRECT — slot stays VERTICAL, a GRID frame lives inside it
+const gallery = card.createSlot();
+gallery.name = "Gallery";
+gallery.layoutMode = "VERTICAL";
+gallery.layoutSizingHorizontal = "FILL";
+
+const grid = figma.createFrame();
+grid.layoutMode = "GRID";
+gallery.appendChild(grid);
+grid.layoutSizingHorizontal = "FILL";   // after append
+```
+
+The consumer still fills the slot; the grid frame is the default content they arrange into. Note that `layoutSizing* = 'FILL'` is rejected on canvas-grid children, so size grid children with `FIXED` or let the grid track govern them.
+
+Map native slots to `kind: "slot"` in the component's `component-mappings/{id}.json`.
+
+### Manual binding — `addComponentProperty` + `slotContentId`
+
+Binds an ordinary frame to a `SLOT` property. The default value is an **empty string**, not a node id.
+
+```javascript
+const slotKey = component.addComponentProperty("Content", "SLOT", "");
+const slotFrame = figma.createFrame();
+component.appendChild(slotFrame);   // must be a direct child, not nested inside another slot
+slotFrame.componentPropertyReferences = { slotContentId: slotKey };
+```
+
+`slotContentId` is a fourth valid `componentPropertyReferences` key alongside `characters` (TEXT), `visible` (BOOLEAN), and `mainComponent` (INSTANCE_SWAP).
+
+### Filling and reading slots in instances
+
+Slot content is set by **appending children** — never through `setProperties`.
+
+```javascript
+const instance = card.createInstance();
+figma.currentPage.appendChild(instance);
+
+// Type-indexed lookup, then narrow by name (see § Traversal and Performance)
+const contentSlot = instance
+  .findAllWithCriteria({ types: ["SLOT"] })
+  .find(n => n.name === "Content");
+
+contentSlot.appendChild(someFrame);
+```
+
+If a post-append edit throws `"Internal Figma Error: Parent not found"`, the original handle was invalidated — re-find the child through the slot and edit the fresh handle:
+
+```javascript
+const appended = contentSlot.children[contentSlot.children.length - 1];
+appended.someProperty = ...;
+```
+
+### Slot restrictions
+
+- `GRID` layoutMode is not allowed on slot nodes
+- Widgets, Stickies, and ComponentNodes cannot be appended directly to a slot
+- Frames nested inside another slot cannot themselves be bound to a slot property
+- `instance.setProperties({ [slotKey]: ... })` **throws** — append children instead
+- `slotNode.resetSlot()` (instance-only) reverts the slot to its default empty state
+- Slots inside variant sets are undocumented — `createSlot()` is only ever documented on a `ComponentNode`. If you need slots on a variant set, create them on each component *before* `combineAsVariants` and verify the result.
+
+### INSTANCE_SWAP (specific swappable child)
+
+Use when consumers should swap a *specific* component — an icon, an avatar — rather than author freeform content:
+
+```javascript
+// Default value must be a real, existing component ID
+const iconKey = parent.addComponentProperty("Icon", "INSTANCE_SWAP", iconComponent.id);
+
+const iconInstance = iconComponent.createInstance();
+parent.appendChild(iconInstance);
+iconInstance.componentPropertyReferences = { mainComponent: iconKey };
+```
+
+Constrain the picker with `preferredValues` (component *keys*, not ids):
+
+```javascript
+parent.editComponentProperty(iconKey, {
+  preferredValues: [
+    { type: "COMPONENT", key: chevronRight.key },
+    { type: "COMPONENT", key: close.key },
+  ],
+});
+```
+
+Never add an icon as a variant axis — one `INSTANCE_SWAP` property covers every icon and avoids combinatorial explosion.
 
 ---
 
@@ -566,6 +903,20 @@ if (variant.cornerRadius > 0) { ... }
 if (typeof variant.topLeftRadius === "number" && variant.topLeftRadius > 0) { ... }
 ```
 
+**Reading a member that doesn't exist on that node type throws** `TypeError: node.X: no such property 'X' on Y node` — and **optional chaining does not defend against it**: the property access happens before `?.` is evaluated, so `node.children?.length` still throws on a TEXT node. Guard with a type check or `"children" in node`.
+
+Notable absences: `children` / `appendChild` / `findAll*` are missing from `TEXT, RECTANGLE, VECTOR, ELLIPSE, LINE, STAR, POLYGON, SLICE`; `layoutMode` and padding exist only on `FRAME, COMPONENT, COMPONENT_SET, INSTANCE`; `fills`/`strokes` are absent from `GROUP`, `PAGE`, `DOCUMENT`; `createInstance` is `COMPONENT`-only.
+
+**Writing** a non-existent property throws something different — `"Cannot add property X, object is not extensible"`. A plausible-sounding name that isn't real (`strokeDashes` instead of `dashPattern`) will always fail; verify against the typings rather than guessing.
+
+---
+
+## Icons: import SVG, never reconstruct
+
+Build icons with `figma.createNodeFromSvg()`. Never assemble them from rotated line primitives — `node.rotation` pivots around the node's origin, not its center, so segments drift and the icon renders broken (a chevron collapses into a blob).
+
+The SVG string must carry a `viewBox` **plus explicit `width`/`height`**. Without the dimensions the node falls back to the viewBox size, which is usually smaller than its container and reads as "the icon didn't size properly."
+
 ---
 
 ## Known API Constraints
@@ -578,29 +929,49 @@ The master pre-flight list — scan before every `use_figma` call. Each is expla
 - Colors use 0–1 range (not 0–255)
 - Fills/strokes are reassigned as new arrays — never mutated in place
 - Page switches use `await figma.setCurrentPageAsync(page)` — the sync setter throws
+- **At most ONE `setCurrentPageAsync` per script** — fan multi-page work out as N calls, one per page
+- Multi-page **reads** go out in parallel (all N tool calls in one message); **writes** stay strictly sequential
 - Position new top-level nodes away from (0,0) — they stack otherwise
-- `letter-spacing` cannot be bound to variables — apply as raw value
+- Use `figma.createAutoLayout()` for containers of related children — not `createFrame()` + absolute x/y
 - `combineAsVariants` needs manual grid layout — variants stack at (0,0)
 - `combineAsVariants` requires `ComponentNode` inputs — not frames
-- Keep `use_figma` scripts under ~200 lines — split larger operations
-- Sequential `use_figma` calls only — never parallelize
-- `resize()` resets both sizing modes to FIXED — call it before setting modes
+- **At most ~10 logical operations per `use_figma` call** — split larger operations
+- `resize()` resets both sizing modes to FIXED — call it before setting modes, and never with a throwaway `1`
 - `layoutSizingHorizontal = "FILL"` can only be set AFTER `appendChild`
+- `'HUG'` is only valid on an auto-layout frame or a TEXT child of one; `'AUTO'` is not a `layoutSizing*` value
+- A HUG parent collapses its FILL children — parent must be FIXED or FILL
+- Wrapping TEXT needs `textAutoResize = 'HEIGHT'` + FIXED width + `resize()` **before** `characters` — plain FILL collapses it
+- `width`/`height` are read-only — use `resize()` (`x`/`y` are writable)
 - Font loading (`loadFontAsync`) must happen BEFORE setting `fontName` or `characters`
+- Discover font style names with `listAvailableFontsAsync()` — never guess, never try/catch probe
+- `lineHeight`/`letterSpacing` need `{value, unit}` objects — bare numbers throw
 - `editComponentProperty` for variant properties may fail — rename children directly
 - `setBoundVariable` on fills/strokes must use `setBoundVariableForPaint`
 - `setBoundVariableForPaint` DROPS the input paint's `opacity` — re-apply it on the returned paint (`paint = { ...paint, opacity }`) for tinted fills
+- `setBoundVariableForEffect` / `ForLayoutGrid` also return NEW objects — capture and reassign
 - `cornerRadius` shorthand is NOT bindable — bind `topLeftRadius`/`topRightRadius`/`bottomLeftRadius`/`bottomRightRadius` individually
 - Re-running `addComponentProperty` after an interrupted call auto-suffixes a duplicate (`Label2`) — inspect `componentPropertyDefinitions` and `deleteComponentProperty` orphans before re-adding
-- `setBoundVariable` on TextStyle objects does NOT work in headless `use_figma`
-- `fontSize`, `fontWeight`, `lineHeight` are NOT bindable via `setBoundVariable` on text nodes — use Text Styles
-- Component property keys have `#uid` suffixes (e.g., `"Label#4:0"`) — never hardcode, always capture from `addComponentProperty`
+- `addComponentProperty` throws on a variant already inside a set — add before `combineAsVariants`, or to the set after
+- **`TextStyle.setBoundVariable()` WORKS and is preferred** — it's the TextNode that can't bind `fontSize`/`fontWeight`/`lineHeight`
+- Component property keys have `#uid` suffixes (e.g., `"Label#4:0"`) — never hardcode, always capture
+- SLOT properties: `createSlot()` auto-creates them; the manual default is `""`; the reference key is `slotContentId`
+- Slot content is set by `appendChild` — `setProperties` on a slot key throws; `GRID` layoutMode is rejected on slots
 - Components don't auto-use non-default variable modes — must call `setExplicitVariableModeForCollection`
 - `figma.notify()` throws "not implemented" — use `return`
 - `getPluginData()`/`setPluginData()` not supported — use `getSharedPluginData()`
+- `figma.loadAllPagesAsync()`, `figma.teamLibrary.*`, `figma.getLocalComponents*()` are not implemented
+- `figma.createImage*()` is unsupported and being removed — `upload_assets` is the only image path (no network in `use_figma`)
+- `figma.createPage()` is Design-files-only — throws in FigJam and Slides
 - `counterAxisAlignItems` does not accept `'STRETCH'` — use `'MIN'` + child `FILL`
 - Only `SOLID` paint type supports variable binding — gradients/images throw
+- Paint `color` takes `{r,g,b}` with no `a`; COLOR **variable values** take `{r,g,b,a}`
 - Sections don't auto-resize — call `resizeWithoutConstraints()` after adding content
-- Variable scopes default to `ALL_SCOPES` — always set explicitly
+- Variable scopes default to `ALL_SCOPES` — always set explicitly; there is no `FILL_COLOR` scope
 - New variable collections start with "Mode 1" — rename it, don't add a first mode
+- Mode limits are plan-dependent (Free 1 / Pro 4 / Org 40+)
+- Duplicate variable names do NOT error — check by name before creating
+- Cross-file variable aliasing is unsupported — import the library variable first
+- Prefer `findAllWithCriteria({types})` over `findAll(predicate)`; **never** `figma.root.findAll()`
+- Batch independent awaits with `Promise.all` — especially `import*ByKeyAsync`
+- Optional chaining does NOT prevent `"no such property"` — the access throws before `?.` evaluates
 - `detachInstance()` may invalidate ancestor node IDs — re-discover by traversal

@@ -8,7 +8,7 @@ description: >
   mapping code props to Figma properties (incl. Code Connect), building Figma component
   libraries, designing new screens in Figma, or auditing Figma files for compliance.
 argument-hint: "[sync|build-library|design|audit|update-guide] [options]"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, mcp__figma__get_design_context, mcp__figma__get_screenshot, mcp__figma__get_metadata, mcp__figma__search_design_system, mcp__figma__use_figma, mcp__figma__get_variable_defs, mcp__figma__generate_figma_design, mcp__figma__get_figjam, mcp__figma__whoami, mcp__figma__get_code_connect_map, mcp__figma__get_code_connect_suggestions, mcp__figma__get_context_for_code_connect, mcp__figma__send_code_connect_mappings, mcp__figma__add_code_connect_map, mcp__figma__create_design_system_rules
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, mcp__figma__get_design_context, mcp__figma__get_screenshot, mcp__figma__get_metadata, mcp__figma__search_design_system, mcp__figma__use_figma, mcp__figma__get_variable_defs, mcp__figma__generate_figma_design, mcp__figma__upload_assets, mcp__figma__get_code_connect_map, mcp__figma__get_code_connect_suggestions, mcp__figma__get_context_for_code_connect, mcp__figma__send_code_connect_mappings, mcp__figma__add_code_connect_map
 compatibility: >
   Requires the official Figma MCP server (https://mcp.figma.com/mcp), a first-party
   remote endpoint operated by Figma, Inc. The mcp__figma__use_figma tool sends Figma
@@ -18,7 +18,7 @@ compatibility: >
   endpoint.
 metadata:
   author: robukh
-  version: "1.3.0"
+  version: "1.4.0"
   external-endpoint: https://mcp.figma.com/mcp
   external-endpoint-provider: Figma, Inc.
   external-endpoint-auth: OAuth (user-initiated)
@@ -166,8 +166,11 @@ Back up / duplicate affected Figma frames before overwriting; show the diff befo
 4. **Validate after each step** — `get_metadata` for structure, `get_screenshot` for visuals
 5. **Fix before moving on** — don't build on a broken foundation
 
-### Sequential Figma writes
-Never parallelize `use_figma` calls. Each must complete and be verified before the next.
+### Sequential Figma writes; parallel reads
+
+**Never parallelize `use_figma` writes.** Each mutation must complete and be verified before the next — Figma state changes are not safe to interleave.
+
+**Read-only discovery is the exception.** A script may switch pages at most once, so multi-page scanning must fan out: one read-only `use_figma` call per page, all emitted **in parallel in a single message**. Never loop `setCurrentPageAsync` over `figma.root.children`.
 
 ### Page context resets between calls
 
@@ -213,7 +216,7 @@ Primitives Collection (1 mode: "Value")
 Semantic Collection (N modes: "Light", "Dark", etc.)
 ├── Aliases into Primitives
 ├── Purpose-named (background, foreground, accent, surface, etc.)
-└── Scoped to specific properties (FILL_COLOR, STROKE_COLOR, etc.)
+└── Scoped to specific properties (FRAME_FILL, TEXT_FILL, STROKE_COLOR, etc.)
 ```
 
 ### Variable scoping rules
@@ -221,7 +224,9 @@ Semantic Collection (N modes: "Light", "Dark", etc.)
 | Token type | Figma scopes |
 |-----------|--------------|
 | Primitive colors | `[]` (hidden) |
-| Semantic colors | `["FILL_COLOR", "STROKE_COLOR"]` |
+| Semantic surface / background | `["FRAME_FILL", "SHAPE_FILL"]` |
+| Semantic text color | `["TEXT_FILL"]` |
+| Semantic border | `["STROKE_COLOR"]` |
 | Spacing | `["GAP", "WIDTH_HEIGHT"]` |
 | Radii | `["CORNER_RADIUS"]` |
 | Font size | `["FONT_SIZE"]` |
@@ -284,6 +289,7 @@ These tools work for published/external library data and file metadata:
 | Create/modify components | `mcp__figma__use_figma` with Plugin API code |
 | Build full designs | `mcp__figma__use_figma` |
 | Generate from description | `mcp__figma__generate_figma_design` |
+| Upload images | `mcp__figma__upload_assets` — **the only supported image path.** `figma.createImage*()` is unsupported and being removed; `use_figma` has no network access |
 
 ### Reading from code
 | Task | Approach |
@@ -329,13 +335,15 @@ Every user-facing text layer MUST have:
 
 **Skip:** internal layout helpers, decorative characters, separators — report as exception. → [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy)
 
-### Every content slot = SLOT (or INSTANCE_SWAP fallback) + boolean toggle
+### Every content region = SLOT or INSTANCE_SWAP + boolean toggle
 
-Every nested instance / content region MUST have:
-1. A **SLOT property** (native — `createSlot()` / `addComponentProperty(name, "SLOT", ...)`) for freeform content, **or** an **INSTANCE_SWAP property** for swapping a specific component (icon, avatar; also the fallback on older runtimes)
-2. A **BOOLEAN property** to show/hide (e.g., `Show CTA`)
+Decide **per region**, not per component — one component often needs both:
+1. A **native `SLOT`** for a freeform content region (Card body, Dialog content), **or** an **`INSTANCE_SWAP`** for a specific swappable child component (Button icon, Avatar)
+2. A **BOOLEAN property** to show/hide, when the region is optional (e.g., `Show CTA`)
 
-Never use raw frames as content slots. **Skip:** structural instances integral to layout (e.g., an internal spacer) — report as exception. → [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy)
+Canonical decision table: [component-contracts.md § Content regions](reference/component-contracts.md#content-regions-slot-vs-instance_swap). Slots must have auto-layout.
+
+Never use raw frames as content regions. **Skip:** structural instances integral to layout (e.g., an internal spacer) — report as exception. → [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy)
 
 ### Every visual property = variable binding (pick the *semantically correct* token)
 
@@ -351,6 +359,10 @@ Before creating any glyph/icon as text **or** ad-hoc vector, search the file for
 
 Bubble up the most-used child properties to the parent. If Dialog nests a Button, expose `CTA Label` on the Dialog so consumers don't drill into the Button instance.
 
+### Auto-layout for every container of related children
+
+Any container holding structurally related children MUST use auto-layout (`figma.createAutoLayout()`) — never `createFrame()` with absolute `x`/`y`. Absolute coordinates govern where a container sits on the canvas; auto-layout governs how children relate inside it. Without it there is nothing protecting the layout from text reflow, content changes, or overlap. This applies to slots too: every SLOT node gets a `layoutMode`.
+
 ### Hug contents by default; sizing is a per-layer contract
 
 Parent components MUST use **Hug Contents** (adapt when children resize, hide, swap). Use Fixed only when a design token defines the dimension (e.g., button height). Set each child's `FILL` vs `HUG` deliberately — containers that stretch use `FILL`, content that defines its own size uses `HUG`. → [design-judgment.md §2](reference/design-judgment.md#2-component-anatomy)
@@ -361,7 +373,7 @@ Variant count = product of all axis value-counts; each 2-value axis doubles the 
 
 ### Text Styles over individual bindings
 
-Every text layer MUST have a Text Style applied via `setTextStyleIdAsync()` — it binds family/size/weight/line-height as one unit. **`TextStyle.setBoundVariable()` does NOT work in headless `use_figma`** — create Text Styles with raw values during token sync; bind variables on styles interactively in the Figma UI after the build.
+Every text layer MUST have a Text Style applied via `setTextStyleIdAsync()` — it binds family/size/weight/line-height as one unit. **Bind typography variables on the Text Style, not on the TextNode**: `TextStyle.setBoundVariable()` works for `fontFamily`/`fontSize`/`fontStyle`/`fontWeight`/`letterSpacing`/`lineHeight`/`paragraphSpacing`/`paragraphIndent` and is the preferred form; the same properties are *not* bindable on a TextNode. Fall back to raw values on the style only where no variable exists.
 
 **Skip:** no matching text style → set raw font properties, report as exception. → [design-judgment.md §4](reference/design-judgment.md#4-visual-hierarchy--composition)
 
