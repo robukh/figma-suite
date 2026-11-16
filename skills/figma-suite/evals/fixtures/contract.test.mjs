@@ -21,7 +21,7 @@ function check(dir, ...extra) {
   try { out = JSON.parse(r.stdout); } catch { }
   return { code: r.status, out, ids: new Set((out?.findings ?? []).map((f) => f.id)), stderr: r.stderr };
 }
-const edit = (file, fn) => writeFileSync(file, fn(readFileSync(file, "utf8")));
+const edit = (file, fn) => writeFileSync(file, fn(readFileSync(file, "utf8").replace(/\r\n/g, "\n")));
 
 let failed = 0;
 const expect = (label, cond) => { console.log(`${cond ? "PASS" : "FAIL"}  ${label}`); if (!cond) failed++; };
