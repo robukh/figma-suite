@@ -1,146 +1,53 @@
 # Naming Conventions
 
-During setup, the user picks a naming preset (or defines a custom one). The choice is stored in `config.json` as `"namingPreset"` and applied across all workflows.
-
----
+Setup stores one naming preset in `config.json` (`"namingPreset"`; `"naming"` for custom), and every workflow reads it: setup when generating the token map and contracts, sync when converting token separators, build-library for component/property/layer/variant names, design when placing instances, audit when checking names. When a file already has a consistent convention, match it instead of imposing a preset.
 
 ## Presets
 
-### 1. `figma-standard` (default)
+| Preset | Components, variants | Properties and booleans | Layers | Figma tokens | Code tokens |
+|--------|---------------------|-------------------------|--------|--------------|-------------|
+| `figma-standard` (default) | PascalCase; `Variant=Primary, Size=Medium` | Title Case: `Size`, `Has Icon`, `Show CTA`, `Is Disabled` | descriptive: `Label`, `Icon`, `Container` | lowercase slash: `color/bg/primary` | kebab: `color-bg-primary` |
+| `code-first` | PascalCase; values camelCase: `variant=primary, size=md` | camelCase matching code props: `size`, `hasIcon`, `showCta`, `isDisabled` | camelCase: `label`, `iconSlot` | slash kebab: `color/bg-primary` | camelCase or kebab |
+| `cti` | PascalCase; `Variant=Primary, Size=Medium` | Title Case, as `figma-standard` | descriptive | `category/type/item`: `color/background/primary` | `category-type-item`; categories fixed to `color`, `size`, `font`, `duration`, `opacity`, `space`, `radius` |
+| `three-tier` | PascalCase; `Variant=Primary, Size=Medium` | Title Case, as `figma-standard` | descriptive | primitive `blue/500`; semantic `bg/primary`, `text/error`; component `button/bg-primary` | kebab |
+| `custom` | per `naming` object below | per `booleanPrefix` | per `layerCase` | per `tokenSeparator` + `tokenStructure` | per user |
 
-The Figma-native convention. Best for teams working primarily in Figma.
+`three-tier` keeps primitives scoped `[]` and semantic tokens scoped per property ([token-map.md](token-map.md#scopes-by-role)). `figma-standard` marks hidden components with a `_` prefix (`_Icon Placeholder`) and private ones with `.` (`.GuidelineCard`); pages use plain Title Case (`Cover`, `Foundations`, `Button`).
 
-| Aspect | Convention | Example |
-|--------|-----------|---------|
-| Components | PascalCase | `Button`, `EmptyState` |
-| Grouping | Slash-separated | `Components / Button` |
-| Variants | `Property=Value` | `Variant=Primary, Size=Medium` |
-| Properties | Title Case | `Size`, `Has Icon`, `Show CTA` |
-| Booleans | Conversational | `Has Icon`, `Show Description`, `Is Disabled` |
-| Layers | Descriptive function | `Label`, `Icon`, `Container`, `Background` |
-| Hidden components | `_` prefix | `_Icon Placeholder`, `_Internal` |
-| Private components | `.` prefix | `.GuidelineCard` |
-| Tokens (Figma vars) | Slash-separated lowercase | `color/bg/primary`, `spacing/4` |
-| Tokens (code) | kebab-case | `color-bg-primary`, `spacing-4` |
-| Pages | Plain Title Case | `Cover`, `Foundations`, `Button`, `Patterns` |
-
-**Used by:** Figma UI3, most Figma community libraries, Figma MCP server guide.
-
----
-
-### 2. `code-first`
-
-Mirrors code conventions. Best for developer-heavy teams where code is source of truth.
-
-| Aspect | Convention | Example |
-|--------|-----------|---------|
-| Components | PascalCase (matches React/Swift) | `Button`, `EmptyState` |
-| Grouping | Slash-separated | `Components / Button` |
-| Variants | `Property=Value`, values in camelCase | `variant=primary, size=md` |
-| Properties | camelCase (matches code props) | `size`, `hasIcon`, `showCta` |
-| Booleans | Code-style | `hasIcon`, `isDisabled`, `showDescription` |
-| Layers | camelCase | `label`, `iconSlot`, `container` |
-| Tokens (Figma vars) | Slash-separated kebab | `color/bg-primary`, `spacing/4` |
-| Tokens (code) | camelCase or kebab | `bgPrimary` or `bg-primary` |
-| Pages | PascalCase | `Cover`, `Foundations`, `Button` |
-
-**Used by:** Teams with Style Dictionary pipelines, React-heavy organizations.
-
----
-
-### 3. `cti` (Category-Type-Item)
-
-Amazon/Style Dictionary convention. Best for multi-platform token systems.
-
-| Aspect | Convention | Example |
-|--------|-----------|---------|
-| Components | PascalCase | `Button`, `Card` |
-| Variants | `Property=Value` | `Variant=Primary, Size=Medium` |
-| Properties | Title Case | `Size`, `Has Icon` |
-| Tokens (Figma vars) | `category/type/item` | `color/background/primary`, `size/font/body` |
-| Tokens (code) | `category-type-item` | `color-background-primary`, `size-font-body` |
-| Token categories | Fixed set | `color`, `size`, `font`, `duration`, `opacity`, `space`, `radius` |
-
-**Used by:** Amazon, Salesforce Lightning, AWS Cloudscape, enterprise design systems.
-
----
-
-### 4. `three-tier`
-
-Primitive → Semantic → Component token tiers. Best for themed/multi-brand systems.
-
-| Aspect | Convention | Example |
-|--------|-----------|---------|
-| Components | PascalCase | `Button`, `Card` |
-| Variants | `Property=Value` | `Variant=Primary, Size=Medium` |
-| Tier 1 (primitive) | `{color}/{shade}` | `blue/500`, `gray/50` |
-| Tier 2 (semantic) | `{role}/{modifier}` | `bg/primary`, `text/error`, `border/default` |
-| Tier 3 (component) | `{component}/{property}` | `button/bg-primary`, `input/border-focus` |
-| Primitives scope | Hidden (`[]`) | Not visible to consumers |
-| Semantic scope | Per-property | `FRAME_FILL`, `TEXT_FILL`, `STROKE_COLOR` |
-
-**Used by:** Material Design 3, Shopify Polaris, Adobe Spectrum, Atlassian Design System.
-
----
-
-### 5. `custom`
-
-User defines their own rules. Setup prompts for each aspect:
+Custom preset keys (setup prompts for each):
 
 ```jsonc
-{
-  "namingPreset": "custom",
-  "naming": {
-    "componentCase": "PascalCase",       // PascalCase | camelCase | kebab-case
-    "variantFormat": "Property=Value",   // Property=Value | slash-separated
-    "propertyCase": "Title Case",        // Title Case | camelCase | Sentence case
-    "booleanPrefix": "Has/Show/Is",      // Has/Show/Is | has/show/is | none
-    "layerCase": "Descriptive",          // Descriptive | camelCase | BEM
-    "tokenSeparator": "/",              // / | . | -
-    "tokenStructure": "semantic",        // flat | semantic | cti | three-tier
-    "hiddenPrefix": "_",                // _ | . | --
-    "pageStyle": "Title Case"           // Title Case | PascalCase | kebab-case
-  }
+"naming": {
+  "componentCase": "PascalCase",     // PascalCase | camelCase | kebab-case
+  "variantFormat": "Property=Value", // Property=Value | slash-separated
+  "propertyCase": "Title Case",      // Title Case | camelCase | Sentence case
+  "booleanPrefix": "Has/Show/Is",    // Has/Show/Is | has/show/is | none
+  "layerCase": "Descriptive",        // Descriptive | camelCase | BEM
+  "tokenSeparator": "/",             // / | . | -
+  "tokenStructure": "semantic",      // flat | semantic | cti | three-tier
+  "hiddenPrefix": "_",               // _ | . | --
+  "pageStyle": "Title Case"          // Title Case | PascalCase | kebab-case
 }
 ```
 
----
+## Boolean prefix rule
 
-## How Presets Are Applied
+Every boolean component property starts with the preset's prefix, so its purpose reads at a glance:
 
-Each workflow reads `config.namingPreset` (or `config.naming` for custom) and applies it:
+| Prefix | Use for | `figma-standard` | `code-first` |
+|--------|---------|------------------|--------------|
+| `Show X` | toggling an optional element or region | `Show Description`, `Show CTA` | `showDescription` |
+| `Has X` | presence of a sub-element | `Has Icon` | `hasIcon` |
+| `Is X` | a state | `Is Disabled` | `isDisabled` |
 
-| Workflow | Uses naming for |
-|----------|----------------|
-| **setup** | Generating token-map and component-contracts with correct names |
-| **sync** | Mapping code token names ↔ Figma variable names (separator conversion) |
-| **build-library** | Component names, property names, layer names, variant format |
-| **design** | Consistent with library naming when placing instances |
-| **audit** | Checking names match the chosen convention |
+Figma boolean values are `true` / `false`, never `Yes/No` or `On/Off`.
 
-### Separator conversion
+## Property, variant and layer naming
 
-The same token has different separators per platform:
-
-| Platform | Separator | Example |
-|----------|-----------|---------|
-| Figma variables | `/` | `color/bg/primary` |
-| CSS custom properties | `-` | `--color-bg-primary` |
-| JSON tokens | `.` | `color.bg.primary` |
-| JavaScript | camelCase | `colorBgPrimary` |
-
-The sync workflow handles conversion automatically based on the preset.
-
----
-
-## Property Naming Rules (All Presets)
-
-Regardless of preset, these rules always apply:
-
-1. **Every text layer** must have a TEXT property — named after its content role (`Title`, `Description`, `Label`, `Placeholder`)
-2. **Every optional element** must have a BOOLEAN property — prefixed with the preset's boolean prefix (`Has Icon`, `Show CTA`, `Is Disabled`)
-3. **Every content region** must have a property, chosen per the [content-region decision table](component-contracts.md#content-regions-slot-vs-instance_swap):
-   - **Specific swappable child** → INSTANCE_SWAP, named after its role (`Icon`, `Leading Action`, `CTA Button`)
-   - **Freeform content region** → native SLOT, named Title Case and singular (`Content`, `Header`, `Footer`)
-4. **Variant properties** must match code prop names (adjusted for case convention)
-5. **No abbreviations** in property names unless universally understood (`CTA` is ok, `desc` is not — use `Description`)
+1. A TEXT property is named for its content role (`Title`, `Description`, `Label`, `Placeholder`).
+2. A content region takes its property kind from the [SLOT vs INSTANCE_SWAP table](component-contracts.md#content-regions-slot-vs-instance_swap): a specific swappable child is an INSTANCE_SWAP named for its role (`Icon`, `Leading Action`, `CTA Button`); a freeform region is a SLOT, Title Case and singular (`Content`, `Header`, `Footer`).
+3. Variant property names match the code prop names, adjusted for the preset's case (`style` in code is `Style` in Figma). When the Figma name must differ from the code name, record the pair in the component's `propertyMap` rather than renaming either side.
+4. Variant values are Title Case in Figma (`Primary`, `Medium`) and map to the lowercase code values through the mapping file.
+5. No abbreviations unless universal: `CTA` is fine, `desc` is not (`Description`).
+6. No unnamed layers (`Frame 47`, `Rectangle 3`); a layer is named for its function, because the name is what the audit and consumers see (red flag #9 in [component-craft.md](component-craft.md#6-the-quality-bar--what-a-senior-rejects-master-list)).
+7. Figma names are for designers and code identifiers live in `codeSyntax` and the mapping file: if code says `button-primary` and Figma says `Button`, keep `Button`.

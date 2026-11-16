@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/robukh/figma-suite/schema/mapping.schema.json",
   "title": "Component Mapping Entry",
-  "description": "One per-component mapping file ({id}.json in component-mappings/). Generated from the Zod schema in reference/mapping-schema.md. Keep in sync with that file and schema/validate.mjs.",
+  "description": "One per-component mapping file ({id}.json in component-mappings/). Editor-hint copy of the entry shape in reference/mapping-schema.md. The enforced rules live in scripts/lib.mjs (validateEntry); keep the three in sync.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "status"],

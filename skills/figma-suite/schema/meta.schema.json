@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/robukh/figma-suite/schema/meta.schema.json",
   "title": "Component Mappings Meta",
-  "description": "Optional component-mappings/_meta.json — schema-format version and last-generation timestamp for the per-component mapping files. Generated from the Meta schema in reference/mapping-schema.md; keep in sync with schema/validate.mjs.",
+  "description": "Optional component-mappings/_meta.json — schema-format version and last-generation timestamp for the per-component mapping files. Shape documented in reference/mapping-schema.md; enforced by scripts/lib.mjs (loadMappings).",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "generatedAt"],

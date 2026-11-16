@@ -1,188 +1,73 @@
 # Workflow: Audit
 
-Read-only audit of a Figma screen, page, or component for design system compliance. Identifies drift, hardcoded values, missing component usage, and inconsistencies.
+Read-only review of a Figma screen, page or component against the design system **and** against the project's design taste. It never modifies the file. Findings cite stable rule IDs and a severity, so they can be fixed, waived or tracked.
 
-**This workflow never modifies the Figma file.** It only reads and reports.
+**Contents:** [Scope](#scope) · [Phase 0: Context](#phase-0-gather-context) · [Phase 1: Inspect](#phase-1-inspect) · [Phase 2: Classify](#phase-2-classify) · [Phase 3: Report](#phase-3-report) · [Handoff](#handoff)
 
----
+Load first: `figma-use` ([official-skills.md](../reference/official-skills.md)); `create_session` for the file. Vocabulary: [component-craft.md §6](../reference/component-craft.md#6-the-quality-bar--what-a-senior-rejects-master-list) (system rows #1–#12) and [anti-slop.md](../reference/anti-slop.md) (rule IDs C/L/K/T/P).
 
 ## Scope
 
-The user can audit:
-- A specific screen (provide node ID or URL)
-- An entire page
-- A single component
-- The whole file (high-level summary only — detailed audits should be per-screen)
+A specific screen (node id or URL), a page, a component, or the whole file (summary only; detailed audits are per screen). Ask which design file when `config.designFiles[]` has several.
 
----
+## Phase 0: Gather context
 
-## Phase 0: Gather Context
+1. Project snapshot: DESIGN.md, mapping files, config. If the contract is **STALE**, say so in the report header; findings about tokens may be sync drift rather than design errors.
+2. Resolve the target to node ids and take one screenshot.
+3. Inventory with `use_figma` (read-only), returning ids, names and counts only, one inventory per call; for several pages, one read per page in parallel. Library components and variables: `get_libraries` then `search_design_system` for gaps.
+4. Read code tokens for comparison in codebase mode.
 
-1. **Read the Figma file** — call `mcp__figma__get_metadata` for file structure. If `config.designFiles[]` has multiple entries, ask which file to audit (or audit a specific URL the user provides).
-2. **Get the design system** — for each library in `config.libraries[]`, call `mcp__figma__search_design_system` to inventory available components and variables
-3. **Read design rules** — load the project's `design-rules.md` from the workspace folder. Audit findings should reference specific rules when applicable.
-4. **Read code tokens** — load project design tokens for comparison (codebase mode only)
-5. **Identify audit target** — resolve the user's request to specific Figma node IDs
-6. **Take a screenshot** of the target for reference
-
----
+For large targets, delegate per-page reads to subagents in parallel and merge their summaries; the audit itself remains read-only.
 
 ## Phase 1: Inspect
 
-The audit scores against the master red-flag list in [design-judgment.md §6 (The Quality Bar)](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list). That table (rows #1–#12) is the shared vocabulary — every finding below maps to a row, and findings should **cite the row number** (e.g. "red flag #5: text-as-icon"). The checklist below is how to detect them.
+Run `scripts/slop-scan.min.js` on the target frame(s) (read-only, via `use_figma`) and the checks below. Then, for screens, run the critic from [critique-rubric.md](../reference/critique-rubric.md) in a fresh context for the judgment-based dimensions (hierarchy, restraint, copy, states).
 
-For each frame/element in the audit target, check:
+**Token compliance** *(system rows #1–#3, #9)* — fills, strokes and text colors bound to variables, and to the **semantic** tier with the **role-correct** token (not a primitive, not just any pixel match); radii bound on all four corners; padding and gap bound and on the scale; font size from a Text Style, not ad hoc.
 
-### Token compliance
-- [ ] **Fill colors** — bound to a variable, or hardcoded hex? *(#1)*
-- [ ] **Stroke colors** — bound to a variable? *(#1)*
-- [ ] **Text colors** — bound to a variable? *(#1)*
-- [ ] **Bound to the right tier** — bound to a **semantic** token, not directly to a primitive (`blue-500`)? *(#2)*
-- [ ] **Bound to the right role** — when several tokens pixel-match, is the *role-correct* one used (e.g. `gap-inline`, not just any 8px spacing)? *(#2)*
-- [ ] **Corner radius** — bound to a radius variable (all 4 corners)? *(#3)*
-- [ ] **Padding/gap** — bound to spacing variables, none unbound/off-scale? *(#3)*
-- [ ] **Font family** — matches the project's configured font?
-- [ ] **Font size** — from the type scale (a Text Style), not ad-hoc? *(#9)*
-- [ ] **Line height** — matches a typography token?
+**Component usage** *(#4–#5, #7–#8, #10–#12)* — library components used where they exist; no detached instances; no text-as-icon; no UI primitives rebuilt as raw frames; no off-spec edits to system components; no combinatorial variant sets that should be booleans or swaps; states present; no dead properties; repeated patterns that should be components.
 
-### Component usage
-- [ ] **Shared components used** — are published library components being used where they should be? *(#12)*
-- [ ] **Detached instances** — any instances that have been detached from their component? *(#4)*
-- [ ] **Text-as-icon** — any `✕`/`✓`/`→`/`▾` typed as text characters instead of an icon component? *(#5)*
-- [ ] **Ad-hoc recreation** — UI primitives (buttons, inputs, cards) rebuilt as raw frames instead of component instances? *(#12)*
-- [ ] **Variant drift** — a system component edited off-spec locally? *(#10)*
-- [ ] **Combinatorial variants** — a variant set with axes that should be boolean/swap properties? *(#7)*
-- [ ] **Missing states** — only a happy-path frame, no hover/pressed/disabled/focus? *(#8)*
-- [ ] **Dead properties** — an exposed component property that binds to nothing? *(#11)*
-- [ ] **Repeated patterns** — similar sibling structures that should be a component?
+**Layout quality** — auto-layout where related children exist; no absolute positioning inside containers; no lopsided HUG that should FILL; spacing on the scale; consistent alignment; radius nesting; consistent radius/stroke/shadow; role-named layers.
 
-### Layout quality
-- [ ] **Auto-layout** — are frames using auto-layout where appropriate?
-- [ ] **Fixed positioning** — any elements with absolute positioning that should be in auto-layout?
-- [ ] **Hug vs Fill** — any lopsided layout from a child set to HUG that should FILL?
-- [ ] **Spacing consistency** — does spacing follow the project's spacing scale (no off-scale magic numbers)? *(#3)*
-- [ ] **Alignment** — shared baselines and consistent edges, no few-px misalignment?
-- [ ] **Radius nesting** — inner radius < outer radius - padding? *(#6)*
-- [ ] **Consistency drift** — radius/stroke/shadow consistent across the set? *(#6)*
-- [ ] **Naming** — layers/tokens role-named, not appearance-named or `Frame 47`? *(#9)*
+**Design taste** (anti-slop) — slop-scan errors and advisories; description-under-title and icon-in-button decisions against DESIGN.md `Project decisions`; one primary action; no nested cards; states and edge content designed.
 
-### Variable health
-- [ ] **Unused variables** — defined but not applied anywhere?
-- [ ] **Wrong scope** — variables applied to properties they shouldn't affect?
-- [ ] **Missing code syntax** — variables without `codeSyntax.WEB`?
-- [ ] **Broken aliases** — semantic variables pointing to nonexistent primitives?
+**Variable health** — unused variables, wrong scope (`ALL_SCOPES` or a scope that lets the variable apply to the wrong property), missing `codeSyntax.WEB`, broken aliases.
 
----
+**Contract** — component usage matches the mapping (`matched` pairs are not drifting; `diverged` entries are documented, not flagged); DESIGN.md `components:` policy respected (allowed variants, icon policy).
 
-## Phase 2: Classify Findings
+### Do not flag
+Intentional screen-specific creative choices; copy decisions beyond the anti-slop rules; layouts that suit the screen; one-off overrides with a stated rationale; anything covered by a recorded waiver or `diverged` note.
 
-Each finding gets a severity level:
+## Phase 2: Classify
 
-| Level | Name | Criteria |
-|-------|------|----------|
-| **3** | Severe | Library-level issue: broken aliases, wrong variable types, component structural problems |
-| **2** | Important | Hardcoded values where variables exist, detached instances, missing components |
-| **1** | Minor | Inconsistent spacing, non-standard radius, font weight mismatch |
-| **0** | Nit | Cosmetic: naming conventions, frame ordering, annotation gaps |
+| Severity | Meaning | Examples |
+|---|---|---|
+| **P0** | Breaks the system or blocks use | broken alias, wrong variable type, structural component bug, contrast failure on primary text |
+| **P1** | Clearly wrong | hardcoded value where a variable exists, detached instance, ban violated (eyebrow, nested card, glyph icon), missing states |
+| **P2** | Should fix | off-scale spacing, advisory slop patterns, inconsistent radius |
+| **P3** | Polish | naming, ordering, annotation gaps |
 
-### What NOT to flag
-- Aesthetic/creative choices that are intentionally screen-specific
-- Copywriting or content decisions
-- Layout decisions that make sense for the specific screen context
-- One-off overrides with a clear design rationale
+Every finding includes: **what** (element and property, with rule ID or red-flag row), **where** (node name, location in the layer tree), **expected** (what the system or DESIGN.md specifies), **actual**, and **why it matters** (consistency, maintainability, handoff, or user impact). One element is reported once, at its highest severity. There is no numeric score: a single number hides which problem matters; report counts per severity instead.
 
-### Evidence standard
-Every finding must include:
-1. **What** — the specific element and property, with the [§6 red-flag row](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list) it maps to (e.g. "#2: bound to primitive where a semantic exists")
-2. **Where** — node name and location in the layer tree
-3. **Expected** — what the design system specifies (the "right way" column for that red flag)
-4. **Actual** — what's in the file
-5. **Why it matters** — impact on consistency, maintainability, or handoff
-
----
-
-## Phase 3: Generate Report
-
-### Markdown format (default)
+## Phase 3: Report
 
 ```markdown
-## Design System Audit Report
+## Audit — <target>   (contract: fresh | STALE: …)
+**Counts:** P0 1 · P1 4 · P2 6 · P3 2 — **In compliance:** 45 elements
+**Critic scores:** job 3 · hierarchy 2 · restraint 1 · fidelity 3 · craft 3
 
-**Target:** [Screen name / Page name]
-**Date:** [current date]
-**Score:** 78/100
+### P0 — Broken alias: `accent-soft`
+- Where: Button/Primary › fill · Rule: #2
+- Expected: alias of `Primitives/brand-500` at 10% · Actual: points to deleted `Primitives/purple-600`
+- Impact: fallback color in both modes
 
-### Summary
-- **In compliance:** 45 elements
-- **Findings:** 12
-  - Severe (3): 1
-  - Important (2): 4
-  - Minor (1): 5
-  - Nit (0): 2
-
-### Findings
-
-#### [Severity 3] Broken alias: `accent-soft` variable
-- **Where:** Button/Primary component, fill property
-- **Expected:** Alias to `Primitives/brand-500` at 10% opacity
-- **Actual:** Points to deleted variable `Primitives/purple-600`
-- **Impact:** Component renders with fallback color, wrong in both modes
-
-#### [Severity 2] Hardcoded color on card background
-- **Where:** HomeScreen > SummaryCard > Background fill
-- **Expected:** Bound to `Semantic/surface` variable
-- **Actual:** Hardcoded `#f5f5f5`
-- **Impact:** Won't respond to dark mode or theme changes
-
-...
-
-### Recommendations
-1. **Fix broken alias** — rebind `accent-soft` to correct primitive
-2. **Run token sync** — 4 hardcoded values match existing variables
-3. **Replace ad-hoc buttons** — 3 frames should use Button component instances
-4. **Consider componentizing** — repeated stat-row pattern appears 5 times
+### P1 — Description restates title · C02 …
+### Recommendations (ordered)
+### Not verified (dark mode, real data, other breakpoints …)
 ```
 
-### JSON format (for programmatic use)
-
-```json
-{
-  "target": "HomeScreen",
-  "score": 78,
-  "findings": [
-    {
-      "severity": 3,
-      "category": "broken_alias",
-      "element": "Button/Primary",
-      "property": "fill",
-      "expected": "Primitives/brand-500 @ 10%",
-      "actual": "Primitives/purple-600 (deleted)",
-      "recommendation": "Rebind to correct primitive"
-    }
-  ]
-}
-```
-
----
-
-## Scoring
-
-Start at 100 and subtract penalty points per finding:
-
-- Each severity 3 finding: **-5 points**
-- Each severity 2 finding: **-3 points**
-- Each severity 1 finding: **-1 point**
-- Severity 0 findings: **no score impact**
-
-Minimum score: 0. The score reflects design system compliance — fewer and less severe findings mean a higher score. A single element can only be penalized once (if it has multiple issues, count only the highest severity).
-
----
+Offer JSON output (`target`, `counts`, `findings[]` with `severity`, `rule`, `node`, `expected`, `actual`, `recommendation`) for programmatic use.
 
 ## Handoff
 
-After presenting the report, suggest next steps:
-- Single finding → offer to fix it directly
-- Multiple findings (2-5) → suggest running the `apply-design-system` pattern from the audit
-- Token-related findings → suggest running `/figma-suite sync`
-- Component-related findings → suggest running `/figma-suite build-library` to update
-- Many findings (5+) → suggest prioritizing severity 3 and 2 first
+One finding → offer to fix it. Several → propose a prioritized plan (P0 and P1 first), and run `design` on the affected screens so fixes pass the same gates. Token findings → `sync`. Component findings → `build-library`. Taste findings that reflect a standing preference → record a `Project decisions` line via `design-md` so it stops being flagged.

@@ -1,0 +1,17 @@
+{
+  "name": "Acme Tasks",
+  "mode": "codebase",
+  "projectPath": ".",
+  "workspaceLocation": "project",
+  "generatedAt": "2026-11-16T10:00:00Z",
+  "libraries": [{ "fileKey": "LIBFILEKEY", "name": "Acme DS" }],
+  "designFiles": [{ "fileKey": "DESIGNFILEKEY", "name": "Acme Screens" }],
+  "namingPreset": "figma-standard",
+  "platform": "web-desktop",
+  "darkModeStrategy": "variable-modes",
+  "tokenSource": "css",
+  "cssVarsPath": "src/tokens.css",
+  "componentPaths": ["src/components/ui"],
+  "designMdPath": "DESIGN.md",
+  "codeRulesPath": "code-rules.md"
+}

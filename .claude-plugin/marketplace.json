@@ -4,14 +4,13 @@
     "name": "robukh"
   },
   "metadata": {
-    "description": "Claude Code skill set for Figma — token sync, component library generation, screen design, and design system audits."
+    "description": "Claude Code skill for Figma: code-to-Figma sync, DESIGN.md, and anti-slop screen design."
   },
   "plugins": [
     {
       "name": "figma-suite",
       "source": "./",
-      "description": "Claude Code skill set for Figma with bidirectional code<->Figma component/token sync, component composition, variable bindings, and design system workflows.",
-      "version": "1.4.0",
+      "description": "Keeps code and Figma in sync (tokens, components, mapping, DESIGN.md) and designs screens like a senior product designer, with an anti-slop gate.",
       "keywords": ["figma", "design-system", "components", "tokens", "design"],
       "license": "MPL-2.0"
     }

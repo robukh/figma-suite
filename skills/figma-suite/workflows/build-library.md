@@ -1,392 +1,175 @@
 # Workflow: Build Library
 
-Generate a professional-grade Figma component library from codebase components. Works in strict phase order with mandatory user checkpoints.
+Load first: figma-use and figma-generate-library (`skill://figma/<name>/SKILL.md`); this workflow only adds figma-suite's config/mapping integration and rules.
+
+Those two skills own the Plugin API rules, the phase model, token and component creation recipes, and error recovery. Nothing here restates them. Where this file and an official skill disagree, this file wins only for the deltas listed below.
+
+## Contents
+
+1. [Must-read](#1-must-read)
+2. [Size the task to the request](#2-size-the-task-to-the-request)
+3. [Target file and config](#3-target-file-and-config)
+4. [Discovery: read components and decide by mapping status](#4-discovery-read-components-and-decide-by-mapping-status)
+5. [File layout](#5-file-layout)
+6. [Building a component](#6-building-a-component)
+7. [Operating rules](#7-operating-rules)
+8. [Verify and report](#8-verify-and-report)
+9. [Update the mapping last](#9-update-the-mapping-last)
 
 ---
 
-## Overview
+## 1. Must-read
 
-Reads UI components (from code), extracts props/variants/states, and creates Figma component sets with variable bindings, auto-layout, and variant properties. **Typical scope:** 20-100+ `use_figma` calls — plan a multi-step session.
-
----
-
-## File Flexibility
-
-Ask the user which scenario applies (only the build location differs):
-
-- **A — Single file (library + screens):** build components directly in the file; screens reference them immediately.
-- **B — Separate library file:** build in the dedicated library file. If `config.libraries[]` has entries, ask which (default: first). After building, remind the user to **publish the library**. From other files, find components via `search_design_system`.
-- **C — No library yet:** create a new file, build all foundations + components in it, offer to make it publishable.
-- **D — Existing published library:** inventory with `search_design_system` first; only create what's missing/needs updating; respect existing naming and structure.
+| Read | For |
+|------|-----|
+| figma-use | Plugin API syntax, sizing, text, variables, slots, gotchas |
+| figma-generate-library (+ its `references/`) | phase model, token/component creation, error recovery |
+| [component-craft.md](../reference/component-craft.md) | token choice, anatomy, variant design, the section 6 red-flag table |
+| [component-contracts.md](../reference/component-contracts.md) | SLOT vs INSTANCE_SWAP table, build tiers, verification script |
+| [mapping-schema.md](../reference/mapping-schema.md) | per-component `component-mappings/{id}.json` |
+| [plugin-api-deltas.md](../reference/plugin-api-deltas.md) | where we intentionally differ from figma-use |
 
 ---
 
-## Phase 0: Discovery
+## 2. Size the task to the request
 
-1. **Find component files** — scan configured `componentPaths` (or auto-discover `src/components/ui/`, `src/components/`, `components/`)
-2. **Read each component** — extract:
-   - Component name
-   - Props and their types (variants, sizes, states)
-   - Default prop values
-   - Styling classes/tokens used
-   - Accessibility attributes
-   - Slot/children patterns
-3. **Read design guide** — if a design system guide exists, extract component specifications (sizes, spacing, radius rules)
-4. **Check existing Figma library** — call `mcp__figma__search_design_system` to see what already exists. Map code components to existing Figma components.
-5. **Present inventory** to user — list every component discovered, with its variants, sizes, and states as found in the code or library. Do not assume any specific number of components, variants, or sizes. Report exactly what was discovered.
+Official guidance sizes the pipeline to the request; the multi-phase ceremony (per-phase checklists, summaries, page documentation) is for full builds only.
 
-Example format (illustrative only — real content comes from discovery):
+| Request | Do | Skip |
+|---------|----|------|
+| Tokens only | [sync.md](sync.md) `--tokens` | components, pages, docs |
+| Single component | read its mapping, confirm dependencies exist, build, verify, report | file restructuring, foundations pages, patterns page |
+| Full library | sections 3-9 in order; one plan checkpoint after discovery | nothing |
+| Reconciliation (library already exists) | diff code vs Figma, change only what the diff names | rebuilding matched components |
+
+Never delete an existing variant, property or page without explicit confirmation; consumers may be using it.
+
+---
+
+## 3. Target file and config
+
+Ask which scenario applies; only the build location differs.
+
+| Scenario | Build in | Then |
+|----------|----------|------|
+| A. Single file (library + screens) | the design file | screens reference components directly |
+| B. Separate library file | a `config.libraries[]` entry (ask which; default first) | publish the library; other files find components via `search_design_system` |
+| C. No library yet | a new file (`create_new_file`) | offer to make it publishable |
+| D. Existing published library | the library file | inventory first; create only what is missing or stale; match its naming |
+
+`config.libraries[]` lists library files, `config.designFiles[]` lists files that consume them, and `config.fileLayout` / `componentLayout` choose the page structure (see [config-schema.md](../reference/config-schema.md)). If tokens are not in Figma yet, run [sync.md](sync.md) `--tokens` first; components bind to variables, so no variable means no component.
+
+---
+
+## 4. Discovery: read components and decide by mapping status
+
+**From code** (scan `componentPaths`, or `src/components/ui/`, `src/components/`, `components/`): per component, extract variant/size/state axes with defaults, tokens used, content regions (freeform `children`/header/body -> `SLOT`; a specific swappable child such as an icon -> `INSTANCE_SWAP`), child components (the dependency graph), and accessibility attributes.
+
+**From Figma** (the component already exists, or Figma is the source of truth): read with read-only `use_figma`: component sets, `componentPropertyDefinitions` (record base names, not `#uid` keys), variant values, bound variables. Fan reads out as one call per page.
+
+Before planning a component, call `get_libraries`, then `search_design_system` scoped by the returned library keys; reuse versus rebuild follows the official decision matrix.
+
+A component's mapping file decides whether to build it:
+
+| Mapping status | Action |
+|----------------|--------|
+| `matched` | update Figma to match code; use `propertyMap` to diff names and values |
+| `code-only` | skip; list under Skipped with the reason |
+| `figma-only` | leave alone: do not rebuild, rename or delete |
+| `split` | one code component becomes several Figma components; build each, in dependency order |
+| `merged` | build the single Figma component once; every code entry points at it |
+| `diverged` | do not "fix" it; the difference is intentional (see the entry's notes); report only |
+| no file yet | treat as new; the file is created after verification (section 9) |
+
+Present the plan as New / Update / Skipped (with reasons) from what was actually discovered, never from assumed counts. Wait for approval before a full-library build; a single component needs none.
+
+---
+
+## 5. File layout
+
+Respect existing pages and never duplicate them. For a new file follow `config.fileLayout`:
+
+| Preset | Components live in |
+|--------|--------------------|
+| `page-per-component` (default) | one page each, under a `Components` group |
+| `single-page-components` | one `Components` page, one Section per component |
+| `flat` | a `Components` page and a `Screens` page |
+| `custom` | the user's structure |
+
+**Library file:** `Cover`, `Getting Started`, `Foundations` (color swatches, type specimens, spacing/radius), `---`, components (per preset), `---`, `Icons`/`Utilities`, `Patterns` (optional, only when asked). Separator pages are named `---`.
+
+**Design file:** `Cover`, `Screens / <Feature>`, `Flows / <Flow>`, `Scratch`. No components are defined here; screens instance the library (see [design-screen.md](design-screen.md)).
+
+**Component page** (`config.componentLayout`): `full` = variant matrix section, specs section (sizing, token references, states), usage section; `compact` = the set plus one spec annotation; `variants-only` = the set alone. Page and layer names follow the naming preset ([naming-conventions.md](../reference/naming-conventions.md)); no layer is left as `Frame 47`.
+
+---
+
+## 6. Building a component
+
+1. **Order.** Primitives, then interactive, then containers, then overlays (tiers in [component-contracts.md](../reference/component-contracts.md#component-composition)). A component is built only after the components it nests exist, because nesting needs a real instance.
+2. **One canonical variant first.** Build one cell completely: every binding, Text Styles, nested instances, component properties. Run the verification (section 8) on it, and only then `clone()` per remaining variant and rebind what differs. Cloning an incomplete cell multiplies each omission across the set.
+3. **Bind every visual property to a variable** and pick by role, not pixel ([component-craft.md](../reference/component-craft.md#1-token-judgment)):
+
+   | Property | Binds to |
+   |----------|----------|
+   | fill, stroke, text fill | semantic color variable (`setBoundVariableForPaint`) |
+   | corner radius (4 corners) | radius variable |
+   | padding (4 sides), gap | spacing variable; role-matched (`gap-inline`, not any 8px token) |
+   | fixed width/height | spacing variable, only where a token defines the size |
+   | font family/size/weight/line height | a Text Style (bind the variables on the style, not the TextNode) |
+
+   No matching variable: create one, or use a raw value and log an exception. A silent skip looks complete and is broken for consumers.
+4. **Content regions.** Decide per region with the [SLOT vs INSTANCE_SWAP table](../reference/component-contracts.md#content-regions-slot-vs-instance_swap); optional regions add a BOOLEAN. Native slots map to `kind: "slot"` and swaps to `kind: "instanceSwap"` in the mapping file.
+5. **Property timing.** Add component properties before `combineAsVariants`, or on the set afterwards; never on a variant already inside a set, because `addComponentProperty` throws there ([plugin-api-deltas.md](../reference/plugin-api-deltas.md)). Capture each returned key (it carries a `#uid` suffix) and link it immediately.
+6. **Variant budget.** Warn at 20 variants, ceiling 30. Past that, move an axis to a boolean/swap or split a sub-component ([component-craft.md](../reference/component-craft.md#3-variant-set-design)).
+7. **Theming.** If variables have several modes, set `setExplicitVariableModeForCollection` on the component, or every variant renders in the first mode.
+
+---
+
+## 7. Operating rules
+
+These correct older guidance in this skill.
+
+- **Session first.** Call `create_session` for the target file before any file tool and pass its `sessionId`; call `get_libraries` before `search_design_system`.
+- **Batch retry-safe work.** Group operations that can be re-run without duplicating (idempotent creates by name, bindings, property sets) into one call; there is no "one thing per call" rule. Keep non-idempotent steps (creating the component, `combineAsVariants`) in their own call so a failure is easy to read.
+- **Obey `safeToRetryWithoutCanvasRead`.** If a `use_figma` error reports it as true, fix the script and retry directly; if not, read the canvas (`get_metadata`) first, because the script may have partly applied.
+- **Ledger of returned IDs.** Keep a name -> ID ledger from every call's return value and read IDs only from it. Do not store state on Figma nodes (no `sharedPluginData`); after a context loss, rebuild the ledger with a read-only scan by name.
+- **Writes are sequential, reads may fan out.** Never run two mutating `use_figma` calls at once.
+- **Screenshot after each component** (`get_screenshot`, at most 3 fix iterations), in addition to the programmatic check below.
+
+---
+
+## 8. Verify and report
+
+A screenshot proves it looks right, not that it is bound right. After the canonical variant and again on the finished set, run [scripts/verify-component.js](../scripts/verify-component.js) via `use_figma` (inputs and outputs: [component-contracts.md](../reference/component-contracts.md#verification)). It returns violations, which must reach zero before the next component, and exceptions.
+
+Report evidence, one row per rule with the actual value:
 
 ```markdown
-## Component Library Plan
-
-### New components to create ({N})
-- {ComponentName} ({variants discovered} × {sizes discovered})
-- ...
-
-### Existing in Figma ({N})
-- {ComponentName} — up to date | needs variant update
-- ...
-
-### Skipped
-- {ComponentName} — {reason: wrapper, logic-only, etc.}
-```
-
-**CHECKPOINT:** Wait for user approval before proceeding. The user may add, remove, or reorder components.
-
----
-
-## Phase 1: Foundations (if not already synced)
-
-Before components, ensure Figma has the token foundation:
-
-1. Check if variable collections exist (Primitives, Semantic, Typography, Spacing)
-2. If missing, run the [sync](sync.md) workflow first (use `sync --tokens` for tokens only)
-3. Verify font family is available in the Figma file
-
-> **If tokens are already synced, skip to Phase 2.**
-
----
-
-## Phase 2: File Structure
-
-Set up the Figma file organization based on the `config.fileLayout` preset chosen during setup. See [figma-file-structure.md](../reference/figma-file-structure.md) for all presets.
-
-1. **Check existing pages** — never duplicate. If the file already has pages, respect the existing structure.
-2. **Create pages** following the chosen preset:
-   - `page-per-component` — one page per component under `Components/`
-   - `single-page-components` — all components on one page with sections
-   - `flat` — minimal pages
-   - `custom` — whatever the user defined
-3. Always create a **Foundations** page (color swatches, typography samples, spacing/radius reference) if one doesn't exist
-4. Use sections within pages to organize variants
-
----
-
-## Component Creation Rules
-
-These rules are mandatory for every component created in Figma. Violations fail QA.
-
-The **why** behind every rule (and what a senior rejects) lives once in [design-judgment.md](../reference/design-judgment.md) — read it before building. The universal mandates live in [SKILL.md "Component Creation Rules"](../SKILL.md#component-creation-rules) (No Silent Skipping, Zero Raw Values, Text Styles, Component Composition, Hug Contents, Build Order). This section adds only the **build-library-specific operational detail** — the binding-reference table, sizing matrix, and property-utilization table — not restated rationale.
-
-### Zero Raw Values — Binding Reference
-
-| Property | Must bind to | Never use |
-|----------|-------------|-----------|
-| Fill color | Semantic color variable | Hex value (`#6366f1`) |
-| Text color | Semantic color variable | Hex value |
-| Stroke color | Semantic color variable | Hex value |
-| Corner radius | `Spacing/radius-*` variable | Pixel number (`24`) |
-| Padding (all sides) | `Spacing/spacing-*` variable | Pixel number (`16`) |
-| Gap | `Spacing/spacing-*` variable | Pixel number (`12`) |
-| Width / Height (fixed) | `Spacing/spacing-*` variable | Pixel number (`56`) |
-| Font family | `Typography/font-family/*` variable | Raw font name ("Inter") |
-| Font size | `Typography/font-size/*` variable | Pixel number (`17`) |
-| Font weight | `Typography/font-weight/*` variable | Numeric weight (`700`) |
-| Line height | `Typography/line-height/*` variable | Pixel number (`26`) |
-
-If a needed variable doesn't exist, create it first (or flag it) — never use a raw value as a workaround.
-
-### Adaptive Sizing Rule
-
-Parent components that contain nested instances must use **Hug Contents** sizing so they adapt when children change.
-
-| Scenario | Parent sizing | Why |
-|----------|--------------|-----|
-| Card contains variable-length list rows | Hug Contents (vertical) | Card grows/shrinks with row count |
-| EmptyState with optional CTA button | Hug Contents (vertical) | Collapses when CTA is hidden |
-| Button with optional icon | Hug Contents (horizontal) | Shrinks when icon is hidden |
-| Dialog with variable body text | Hug Contents (vertical) | Grows with content |
-| Fixed-height input/button | Fixed height, Fill (horizontal) | Height is a design token, width fills parent |
-
-**Why it matters for builds:** when a boolean hides a child or a child is swapped for a different variant, the parent must collapse/resize — only Hug Contents + auto-layout does this. Default Hug both axes; Fill only for parent-width stretch; Fixed only when a token defines the dimension. API mechanics: [plugin-api-patterns.md § Sizing](../reference/plugin-api-patterns.md#sizing-hug-contents-vs-fixed).
-
-### Component Properties — Full Utilization
-
-Every component must expose the right properties so consumers can customize without detaching.
-
-| Property type | When to use | Example |
-|--------------|------------|---------|
-| **Variant** | Visual style choices (2+ options) | `Variant=Primary\|Secondary`, `Size=Sm\|Md\|Lg` |
-| **Boolean** | Show/hide optional elements | `Show Icon`, `Show CTA`, `Disabled`, `Loading` |
-| **Text** | Editable text content | `Label`, `Title`, `Description`, `Placeholder` |
-| **Slot** (native) | Freeform content regions | `Content`, `Header`, `Footer` — created with `parent.createSlot()` |
-| **Instance swap** | Swap a specific child component | `Icon`, `Leading Action`, `Trailing Element` |
-| **Exposed nested properties** | Bubble up child instance properties | Expose Button.Label through parent as `CTA Label` |
-
-**Slots and instance swap best practices:**
-- Decide **per region** using the canonical table in [component-contracts.md § Content regions](../reference/component-contracts.md#content-regions-slot-vs-instance_swap): freeform region → `SLOT`; specific swappable child → `INSTANCE_SWAP`. A Card with a swappable header icon and an authored body needs both.
-- **Every slot gets auto-layout** — `layoutMode` `VERTICAL`/`HORIZONTAL`, never left at `NONE`. `GRID` is rejected on slot nodes; nest a `GRID` frame inside the slot instead
-- For instance swap: set a sensible **default instance** (the most common variant) and use **preferred values** to constrain which components can be swapped in
-- For optional regions, pair with a boolean property: `Show Icon` controls visibility, `Icon` controls which icon
-- Map native slots to `kind: "slot"` and swappable instances to `kind: "instanceSwap"` in the component's `component-mappings/{id}.json`
-
-**Exposed nested properties:**
-When component A nests component B, expose B's most-used properties through A:
-- A text field on the parent that maps to the child's label
-- An instance swap on the parent that maps to the child's icon slot
-- This lets consumers edit the child without drilling into layers
-
-### Build Order
-
-Build in dependency order — primitives before composites. Tier definitions (1: primitives → 4: overlays): [component-contracts.md § Build order](../reference/component-contracts.md#build-order). Assign tiers from the dependency graph discovered in Phase 0; never build a higher-tier component before its dependencies exist.
-
----
-
-## Phase 3: Build Components (one at a time)
-
-For each component in the approved plan, following the build order above:
-
-### Step 1: Analyze code component
-
-Read the component file and extract:
-- **Variant axis** — e.g., `variant: "primary" | "secondary" | "outline"`
-- **Size axis** — e.g., `size: "sm" | "md" | "lg"`
-- **State axis** — e.g., default, hover, pressed, disabled, focused, error
-- **Content regions** — which are specific swappable children (icon, badge) vs freeform (`children`, header/body/footer)
-- **Fixed dimensions** — height, min-width, padding from Tailwind classes
-- **Tokens used** — map each class to the corresponding Figma variable
-- **Child components used** — which existing library components does this code component render?
-
-### Step 2: Create component structure
-
-Each sub-step below is a separate `use_figma` call. Do NOT combine multiple sub-steps into one call.
-
-#### Step 2a: Frame and auto-layout
-
-Navigate to the component's page. Create a Section named after the component. Create the base component frame:
-
-1. `figma.createComponent()` — set `name`, `layoutMode` (VERTICAL or HORIZONTAL based on code)
-2. Call `resize()` BEFORE setting sizing modes (resize resets them to FIXED)
-3. Set sizing: `layoutSizingHorizontal` and `layoutSizingVertical` (HUG by default)
-4. Return the component's node ID
-
-#### Step 2b: Bind spacing variables
-
-In a separate `use_figma` call, bind **every** spacing property individually:
-
-- `setBoundVariable("paddingTop", spacingVar)`
-- `setBoundVariable("paddingRight", spacingVar)`
-- `setBoundVariable("paddingBottom", spacingVar)`
-- `setBoundVariable("paddingLeft", spacingVar)`
-- `setBoundVariable("itemSpacing", gapVar)` — for auto-layout gap
-- `setBoundVariable("topLeftRadius", radiusVar)`
-- `setBoundVariable("topRightRadius", radiusVar)`
-- `setBoundVariable("bottomLeftRadius", radiusVar)`
-- `setBoundVariable("bottomRightRadius", radiusVar)`
-
-**Choose semantically correct spacing tokens.** Gap and padding values carry meaning — a tight `spacing-2` for inline elements is different from a `spacing-6` section gap. Match the code component's spacing intent, not just the pixel value. If the project's design rules specify padding/gap conventions, follow them.
-
-If no suitable variable exists for a value (e.g., an unusual one-off spacing), use the raw value and add it to the exceptions list with a reason. **Never silently skip a binding.**
-
-#### Step 2c: Create child elements
-
-In a separate `use_figma` call:
-
-- For **text layers**: load font first (`loadFontAsync`), create text, set `fontName`, set `characters`. Return all text node IDs.
-- For **nested instances**: find the existing library component by ID, call `createInstance()`, append to parent, set variant properties via `setProperties()`. Return all instance node IDs.
-- For **shapes** (dividers, backgrounds): create and append. Return node IDs.
-
-Set `layoutSizingHorizontal = "FILL"` on children that should stretch — AFTER `appendChild`.
-
-#### Step 2d: Apply text styles
-
-In a separate `use_figma` call, for **every** text layer created in 2c:
-
-1. Find the matching text style via `figma.getLocalTextStylesAsync()`
-2. Apply it: `await textNode.setTextStyleIdAsync(styleId)`
-3. If no matching text style exists, set raw font properties and add to exceptions list
-
-**Do not skip any text layer** — each gets a text style or a logged exception. **Never `setBoundVariable` for `fontSize`/`fontWeight`/`lineHeight` on a TextNode** (not bindable there) — bind those on the **Text Style** itself, which does support them and is the preferred form. See [plugin-api-patterns.md § Variable Binding on Text Styles](../reference/plugin-api-patterns.md#variable-binding-on-text-styles--bind-the-style-not-the-textnode).
-
-#### Step 2e: Bind color variables
-
-In a separate `use_figma` call, bind fills, strokes, and text fills via `setBoundVariableForPaint`:
-
-```javascript
-const paint = figma.variables.setBoundVariableForPaint(figma.util.solidPaint("#ffffff"), "color", bgVar);
-node.fills = [paint];   // same pattern for textNode.fills and node.strokes
-```
-
-Walk **every** node with a fill or stroke. For a tinted fill, re-apply `opacity` AFTER binding (it gets dropped). Gradients/images/one-off decorative colors → keep raw, log exception. Full patterns + the opacity gotcha: [plugin-api-patterns.md § Variable Binding on Paints](../reference/plugin-api-patterns.md#variable-binding-on-paints-fills-and-strokes).
-
-#### Step 2f: Add component properties
-
-In a separate `use_figma` call, add properties for **every** qualifying element:
-
-| Child element | Property to add | Link via |
-|---|---|---|
-| Every user-facing text layer | `addComponentProperty("Label", "TEXT", "default")` | `textNode.componentPropertyReferences = { characters: key }` |
-| Every optional element | `addComponentProperty("Show Label", "BOOLEAN", true)` | `node.componentPropertyReferences = { visible: key }` |
-| Every freeform content region | `parent.createSlot()` — auto-creates the SLOT property | nothing to link; read the key from `slot.componentPropertyReferences.slotContentId` |
-| Every fixed swappable child | `addComponentProperty("Icon", "INSTANCE_SWAP", defaultId)` | `instance.componentPropertyReferences = { mainComponent: key }` |
-
-**Capture every returned key** from `addComponentProperty` and link it immediately. Do NOT add properties without linking them. Property keys have a `#uid` suffix (e.g., `"Label#4:0"`) — never hardcode or guess these keys, as using the wrong key produces **silent failures**.
-
-**When to skip:** Internal/decorative elements that consumers should never customize (e.g., a separator line, a background shape, an internal layout frame). Add each skip to the exceptions list with a reason.
-
-**Variable modes:** If the component uses multi-mode variables (Light/Dark, etc.), call `setExplicitVariableModeForCollection(collectionId, modeId)` on the component frame. Without this, all variants render using the collection's first mode regardless of intent.
-
-#### Step 2g: Collect exceptions
-
-After steps 2a-2f, compile the exceptions list. Report to the user:
-
-```
-Component: Button
-Exceptions (3):
-- paddingLeft: used raw 2px — no spacing variable for 2px in the scale
-- Separator line fill: not bound — decorative, single-use color
-- "_Internal Spacer" text: no TEXT property — internal layout helper, not user-facing
-```
-
-If there are zero exceptions, report that all properties are fully bound and exposed.
-
-### Step 3: Build variant matrix
-
-**Before cloning: finish and verify ONE canonical variant.** Steps 2a–2f build a single variant — confirm it is 100% complete (all paint *and* dimensional bindings, text styles, nested instances, and component properties) and **run the verification script against it** (Step 5) before you propagate it. Cloning an incomplete variant multiplies every omission across the whole set: one missing binding becomes N missing bindings. Also keep the matrix small — promote an axis to a *variant property* only when it changes anatomy/visual treatment; toggles and content go to boolean/text/swap, which don't multiply the count (see [design-judgment.md §3](../reference/design-judgment.md#3-variant-set-design)).
-
-Then, for each remaining combination of variant axes:
-1. **`clone()`** the verified canonical component (don't rebuild from scratch)
-2. Rebind **only what differs** for that variant (e.g. the tone color, the size tokens) — everything else carries over from the verified template
-3. Name using `Property=Value` format: `variant=primary, size=md`
-4. Combine all variants into a component set using `combineAsVariants`
-5. **Layout variants in a grid after combining** — all children stack at (0,0); position them and `resizeWithoutConstraints` the set. Grid code: [plugin-api-patterns.md § Variant Layout](../reference/plugin-api-patterns.md#variant-layout-after-combineasvariants).
-
-**Note:** Component properties MUST be added in Step 2f (before combining). After combining, the set inherits all properties from its children. Do NOT add properties to the `ComponentSetNode` directly.
-
-### Step 4: Screenshot and validate
-
-1. Call `mcp__figma__get_screenshot` on the component set
-2. Verify visually:
-   - All variants are visually distinct
-   - Spacing and sizing match code specifications
-   - No overlapping or clipped content
-   - Auto-layout behaves correctly
-3. If issues found, fix and re-screenshot (max 3 iterations)
-
-### Step 5: Programmatic verification (MANDATORY)
-
-Run the verification script from [component-contracts.md](../reference/component-contracts.md#verification-script) via `use_figma`. This script walks every node in the component and returns:
-
-- **Violations** — properties that MUST be bound/exposed but aren't. Fix these before proceeding.
-- **Exceptions** — properties intentionally left raw/unexposed (from Step 2g). Report to user.
-
-If violations exist, fix them and re-run verification. Do NOT proceed to the next component until violations are zero.
-
-**Report evidence, not a claim — output a verification table.** A screenshot proves it looks right, not that it's bound right. After the script passes, render a table with one row per rule and its **actual value**, so the user can see exactly what was applied without having to ask:
-
-```markdown
-### Verification — Button / variant=primary, size=md
+### Verification: Button / variant=primary, size=md
 | Rule | Status | Actual value |
 |------|--------|--------------|
 | Fill variable-bound | PASS | `Semantic/action-primary` |
-| Text fill variable-bound | PASS | `Semantic/on-action` |
 | Padding (4 sides) bound | PASS | `Spacing/spacing-3` (TB), `Spacing/spacing-4` (LR) |
 | Gap bound | PASS | `Spacing/gap-inline` |
 | Radius (4 corners) bound | PASS | `Spacing/radius-md` |
-| Text Style applied | PASS | `S:` → `Body / Medium` |
-| Label TEXT property | PASS | `Label#4:0` → "Button" |
-| Icon INSTANCE_SWAP | PASS | `Icon#5:1` → `Icons/Chevron` |
-
-Exceptions (1): separator fill — decorative, single-use color (not bound).
+| Text Style applied | PASS | `Body / Medium` |
+| Label TEXT property | PASS | `Label` -> "Button" |
+| Icon INSTANCE_SWAP | PASS | `Icon` -> `Icons/Chevron` |
 ```
 
-Include this table in the per-component report. A green script plus a clean pass on the [design-judgment.md §6 quality bar](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list) is the senior bar.
+**Exceptions report**, listed under the table with a reason each, or "no exceptions":
 
-### Step 6: Annotate
-
-Add a frame below the component set with:
-- Component name and description
-- Props table (name, type, default, description)
-- Usage guidelines from design guide (if available)
-
-**Repeat Steps 1-6 for each component.**
-
----
-
-## Phase 4: Patterns Page
-
-After all components are built:
-
-1. Create a **Patterns** page
-2. Build common layout compositions using instances of the new components. Derive patterns from what was actually built — compose the components into realistic screen sections that demonstrate how they work together. If unsure which patterns are most useful for this project, ask the user.
-3. Screenshot and validate each pattern
-
----
-
-## Phase 5: QA and Handoff
-
-1. **Variable audit** — ensure every component property is bound to a variable (no raw values)
-2. **Consistency check** — spacing, radius, and colors should all come from the same token collections
-3. **Component naming** — verify all use consistent `ComponentName/Variant=Value` naming
-4. **Generate report**:
-
-```markdown
-## Library Build Complete
-
-### Components created: {N}
-| Component | Variants | Properties | Status |
-|-----------|----------|-----------|--------|
-| {name} | {count} | {count} ({list}) | Complete |
-| ... | ... | ... | ... |
-
-### Foundations
-- Color variables: {N}
-- Typography variables: {N}
-- Spacing variables: {N}
-- Radius variables: {N}
-
-### Next steps
-- Publish library to team
-- Set up Code Connect mappings
+```
+Exceptions (2):
+- paddingLeft: raw 2px, no variable at 2px in the scale
+- Separator fill: not bound, decorative single-use color
 ```
 
-Report the actual counts from the build. Do not assume any specific number of variables or components.
+Then walk the [section 6 red-flag table](../reference/component-craft.md#6-the-quality-bar--what-a-senior-rejects-master-list); a green script plus a clean table is the bar.
 
 ---
 
-## Updating an Existing Library
+## 9. Update the mapping last
 
-When components already exist in Figma:
-
-1. **Compare** code component props with Figma component properties
-2. **Flag differences** — new variants, removed variants, changed defaults
-3. **Present diff** to user with recommended updates
-4. **Apply approved changes** — add new variants, update properties, rebind variables
-5. **Never delete existing variants** without explicit confirmation — they may be in use
-
----
-
-## Figma Plugin API Implementation Rules
-
-See [plugin-api-patterns.md](../reference/plugin-api-patterns.md) for the full reference on correct Plugin API usage: sizing (hug vs fixed), text style application, native SLOT vs INSTANCE_SWAP content regions, component composition via instances, and known API constraints.
-
-All patterns in that file are **mandatory** for this workflow. Key reminders:
-
-- Never call `resize()` on a HUG axis
-- Use `setTextStyleIdAsync()` for typography; bind font variables on the **Text Style**, not the TextNode
-- Content regions must be SLOT or INSTANCE_SWAP properties, never empty frames — and every slot gets auto-layout
-- Use `figma.createAutoLayout()` for containers of related children, never `createFrame()` + absolute `x`/`y`
-- Add component properties **before** `combineAsVariants` or to the set **after** — never to a variant already inside a set
-- Build in strict tier order — never build a component before its dependencies
-- At most ~10 logical operations per `use_figma` call — split larger operations
+Only after the Figma side verifies with zero violations, write `component-mappings/{id}.json` for each component built or changed: `nodeId`, `componentName`, base property names (never `#uid`), `propertyMap` with value maps, and `published` once the library is published. Update only the files that changed, never overwrite hand-tuned value maps, and run the contract check ([SKILL.md → Commands](../SKILL.md#commands-defined-once-workflows-say-run-the-contract-check)). A failed or partial build leaves its mapping file untouched, so the next sync still sees the gap. Finish by reminding the user to publish the library (scenarios B-D), then to run [sync.md](sync.md) `--components` to confirm zero drift.

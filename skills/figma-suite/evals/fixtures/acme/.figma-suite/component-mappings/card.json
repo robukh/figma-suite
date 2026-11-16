@@ -1,0 +1,7 @@
+{
+  "id": "card",
+  "status": "matched",
+  "code": { "path": "src/components/ui/Card.tsx", "exportName": "Card", "props": ["children"] },
+  "figma": { "fileKey": "LIBFILEKEY", "nodeId": "12:400", "componentName": "Card", "properties": ["Content"], "published": true },
+  "propertyMap": [{ "codeProp": "children", "figmaProp": "Content", "kind": "slot" }]
+}

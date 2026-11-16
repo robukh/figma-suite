@@ -1,281 +1,99 @@
 # Config Schema
 
-Single source of truth for the project config file structure. Config lives in the workspace folder, whose location the user picks during setup:
+The project config and the workspace folder around it. Every workflow resolves the workspace the same way (`scripts/discover.mjs` does it for you).
 
-| Workspace location | Config path |
-|---|---|
-| **Project-level** (default inside a project) | `{project-root}/.figma-suite/config.json` |
-| **Global** (personal, or standalone with no codebase) | `<HOME>/.claude/figma-suite/{project-name}/config.json` |
+**Contents:** [Workspace](#workspace) · [config.json](#configjson) · [Field notes](#field-notes) · [Presets](#presets) · [code-rules.md](#code-rulesmd) · [state.json](#statejson)
 
-- `<HOME>` — the user's home directory (`~` on macOS/Linux, `%USERPROFILE%` on Windows). Always resolve to the absolute path at runtime.
+## Workspace
 
-Workflows resolve the workspace via the discovery order in [SKILL.md § Auto-discovery order](../SKILL.md#auto-discovery-order-workspace): project-level first, then global matching `projectPath`.
+| Location | Path | Default for |
+|---|---|---|
+| Project-level | `{project-root}/.figma-suite/` | codebase projects (shareable via git) |
+| Global | `<HOME>/.claude/figma-suite/{project-name}/` | standalone (no codebase); personal setups |
 
-A global workspace folder is named by the project name (kebab-cased), not by a Figma file key — because a project may span multiple Figma files.
+`<HOME>` is `~` on macOS/Linux and `%USERPROFILE%` on Windows. A global folder is named by the kebab-cased project name, not a Figma file key, because a project can span several Figma files. Discovery order: project-level first, then global matching `projectPath`.
 
----
+```
+{workspace}/
+├── config.json                       # this schema
+├── code-rules.md                     # rules for coding from Figma (user-editable)
+├── token-map.generated.md            # tokens -> Figma variables
+├── component-contracts.generated.md  # components -> Figma component sets
+├── component-mappings/               # one {id}.json per component + optional _meta.json
+└── state.json                        # sync hashes (written by check-contract --write-state)
 
-## Full Schema
+{project-root}/DESIGN.md              # the design contract's authored half (standalone: in the workspace)
+```
+
+## config.json
 
 ```jsonc
 {
-  // === Project identity ===
-  "name": "",                              // Human-readable project name
-  "mode": "standalone",                    // "standalone" | "codebase"
-  "projectPath": "",                       // Absolute path to codebase root (codebase mode only)
-  "workspaceLocation": "project",          // "project" (.figma-suite/ in project root) | "global" (<HOME>/.claude/figma-suite/{name}/)
-  "generatedAt": "",                       // ISO 8601 timestamp of last setup/re-setup run
+  "name": "",                          // human-readable project name
+  "mode": "codebase",                  // "codebase" | "standalone"
+  "projectPath": "",                   // absolute path to the codebase root (relative paths resolve from the folder holding .figma-suite/)
+  "workspaceLocation": "project",      // "project" | "global"
+  "generatedAt": "",                   // ISO 8601, last setup run
 
-  // === Figma files ===
-  // Libraries: published DS files that provide components and variables.
-  // Array because a project may consume multiple libraries
-  // (e.g., core primitives + product-specific, or icons + components).
-  "libraries": [
-    {
-      "fileKey": "",                       // From Figma URL
-      "name": ""                           // Human-readable, auto-populated from Figma metadata
-    }
-  ],
-  // Design files: files where screens are composed using library components.
-  // Array because a project typically has multiple design files
-  // (e.g., "Main Screens", "Onboarding", "Marketing Pages").
-  "designFiles": [
-    {
-      "fileKey": "",
-      "name": ""
-    }
-  ],
+  "libraries":   [{ "fileKey": "", "name": "" }],   // published DS files (components + variables)
+  "designFiles": [{ "fileKey": "", "name": "" }],   // files where screens are composed
 
-  // === Presets (chosen during setup) ===
-  "namingPreset": "figma-standard",        // "figma-standard" | "code-first" | "cti" | "three-tier" | "custom"
-  "platform": "mobile-ios",               // "mobile-ios" | "mobile-android" | "mobile-cross" | "tablet" | "web-desktop" | "web-responsive" | "landing" | "custom"
-  "fileLayout": "page-per-component",     // "page-per-component" | "single-page-components" | "flat" | "custom"
-  "componentLayout": "full",              // "full" | "compact" | "variants-only"
-  "darkModeStrategy": "variable-modes",   // "variable-modes" | "duplicate-frames"
-  "frameWidth": 393,                      // Default frame width in px (from platform preset)
-  "frameHeight": 852,                     // Default frame height in px (from platform preset)
+  "namingPreset": "figma-standard",    // figma-standard | code-first | cti | three-tier | custom
+  "platform": "web-desktop",           // see Presets
+  "fileLayout": "page-per-component",  // page-per-component | single-page-components | flat | custom
+  "componentLayout": "full",           // full | compact | variants-only
+  "darkModeStrategy": "variable-modes",// variable-modes | duplicate-frames
+  "frameWidth": 1440, "frameHeight": 900,
 
-  // === Token discovery (codebase mode only) ===
-  "tokenSource": "auto",                  // "auto" | "dtf" | "style-dictionary" | "css" | "tailwind" | "js"
-  "tokenPaths": {
-    "colors": [],                          // e.g. ["design-tokens/colors-light.tokens.json"]
-    "typography": [],
-    "spacing": [],
-    "radii": [],
-    "shadows": []
-  },
-  "cssVarsPath": "",                       // CSS custom properties file
-  "tailwindConfigPath": "",                // Tailwind config for extended theme
+  "tokenSource": "auto",               // auto | dtf | style-dictionary | css | tailwind | js
+  "tokenPaths": { "colors": [], "typography": [], "spacing": [], "radii": [], "shadows": [] },
+  "cssVarsPath": "", "tailwindConfigPath": "",
+  "componentPaths": [],                // e.g. ["src/components/ui"]
 
-  // === Components (codebase mode only) ===
-  "componentPaths": [],                    // e.g. ["src/components/ui"]
+  "collections": { "primitives": "Primitives", "semantic": "Semantic", "typography": "Typography", "spacing": "Spacing" },
+  "modes": { "light": "Light", "dark": "Dark" },
 
-  // === Figma variable collections ===
-  "collections": {
-    "primitives": "Primitives",
-    "semantic": "Semantic",
-    "typography": "Typography",
-    "spacing": "Spacing"
-  },
-
-  // === Mode names for multi-mode collections ===
-  "modes": {
-    "light": "Light",
-    "dark": "Dark"
-  },
-
-  // === Design rules ===
-  // Path to the project's design rules file, relative to workspace folder.
-  // Auto-generated during setup, user-editable afterward.
-  // design-rules.md  -> rules for DESIGNING in Figma
-  // code-rules.md    -> rules for WRITING/maintaining CODE from Figma
-  "designRulesPath": "design-rules.md",
-  "codeRulesPath": "code-rules.md"
+  "designMdPath": "DESIGN.md",         // relative to projectPath (standalone: to the workspace)
+  "codeRulesPath": "code-rules.md"     // relative to the workspace
 }
 ```
 
----
+## Field notes
 
-## Field Reference
+- **`libraries`** — published files that provide components and variables. Reads query them; `build-library` and `sync` write to the first one unless the user picks another. If library and screens live in one file, list it in both arrays.
+- **`designFiles`** — where `design` and `audit` operate; ask which one when there are several.
+- **`tokenPaths`, `cssVarsPath`, `tailwindConfigPath`** — the files whose content hashes feed freshness detection, so keep them accurate. A token file missing from this list will not trigger a stale warning.
+- **`designMdPath`** — see [design-md-template.md](design-md-template.md). It replaces the old `designRulesPath`/`design-rules.md`; setup migrates an existing `design-rules.md` into DESIGN.md and then removes it.
+- **`mode: "standalone"`** — no codebase: token and component data come from the Figma files, DESIGN.md lives in the workspace, and `--to-code` is unavailable.
 
-### `libraries` (array)
+## Presets
 
-Each entry is a Figma file that has been **published as a library**. These files contain the components and variables that design files consume.
+| `platform` | Frame | Notes |
+|---|---|---|
+| `mobile-ios` | 393×852 | iOS status bar, tab bar |
+| `mobile-android` | 393×852 | Android status bar, bottom nav |
+| `mobile-cross` | 393×852 | generic nav; suggested for React Native / Expo |
+| `tablet` | 1024×1366 | side or top nav |
+| `web-desktop` | 1440×900 | top nav; suggested for Next / Nuxt / Svelte |
+| `web-responsive` | 375, 768, 1440 | one frame per breakpoint |
+| `landing` | 1440 wide, auto height | hug vertically |
+| `custom` | user-defined | |
 
-- Most projects have 1 library. Some have 2+ (e.g., an icon library separate from a component library, or a shared primitives library + a product-specific library).
-- The user adds libraries during setup. They can add more later by saying "add another library."
-- Workflows that read the design system (`search_design_system`, `get_variable_defs`) query libraries.
-- Workflows that write components or variables (`build-library`, `sync`) write to the **first library** by default, or ask the user which library to target if multiple exist.
+`fileLayout` and `componentLayout` presets are described with the library layouts in [build-library.md](../workflows/build-library.md). `darkModeStrategy: variable-modes` (default) toggles one frame via variable modes; `duplicate-frames` places light and dark side by side. Naming presets: [naming-conventions.md](naming-conventions.md).
 
-### `designFiles` (array)
+## code-rules.md
 
-Each entry is a Figma file where screens and flows are composed using library components.
+Rules for the coding agent when writing or maintaining code from Figma (the `--to-code` half of `sync`, and design-to-code handoffs). Generated at setup from the detected styling system, token format and component conventions; user-editable. It is separate from DESIGN.md because the audiences are opposite (designing in Figma vs coding from Figma). Expected sections:
 
-- A project may have many design files (one per feature area, platform, or sprint).
-- The user adds design files during setup. They can add more later.
-- Workflows that compose screens (`design`) or audit screens (`audit`) operate on a specific design file — ask the user which one, or use the most recently added if only one exists.
+- **Component mapping** — consult `component-mappings/{id}.json` before generating code from a Figma node; translate values through `propertyMap.values` (figmaValue → codeValue); never invent code for `figma-only`, never expect a node for `code-only`.
+- **Naming & files** — where components go, file naming, export style.
+- **Props & types** — VARIANT → union type; BOOLEAN → boolean; TEXT → string; SLOT / INSTANCE_SWAP → children / node.
+- **Tokens in code** — canonical format, reference tokens (`var(--token)`), never hardcode values that exist as tokens.
+- **Styling system** and **accessibility** — framework conventions; roles, labels, target sizes.
+- **Do not** — project-specific anti-patterns.
 
-### `designRulesPath` (string)
+If the file is missing, follow the codebase's conventions, reference tokens instead of values, and consult the mapping files.
 
-Points to a markdown file in the workspace folder that contains project-specific design rules **for designing in Figma**. This file is:
+## state.json
 
-1. **Auto-generated** during setup by scanning the library's variables, components, and structure
-2. **User-editable** — the designer can refine rules at any time
-3. **Read by every workflow** that creates or evaluates visual design (design, build-library, audit)
-
-See the "Design Rules File" section below for the expected format.
-
-### `codeRulesPath` (string)
-
-Points to a markdown file in the workspace folder that contains project-specific rules **for the coding agent** — rules it follows when writing or maintaining code from Figma (the `--to-code` half of the loop, and any design-to-code handoff). This is the code-facing counterpart to `designRulesPath`. Same lifecycle: auto-generated during setup, user-editable, read by the code-facing paths.
-
-See the "Code Rules File" section below for the expected format.
-
----
-
-## Design Rules File
-
-The design rules file (`design-rules.md` by default) lives in the project workspace folder alongside `config.json`. It contains project-specific rules that the AI follows when designing, building components, or auditing.
-
-### How it's generated
-
-During setup, after scanning the library:
-
-1. Read all variables from the library — extract spacing scale, radius scale, color semantics, typography scale
-2. Read all components — extract sizing patterns, common compositions
-3. Infer layout conventions from existing screens (if any design files are connected)
-4. Generate a draft `design-rules.md` with sensible defaults based on what was found
-5. Present it to the user for review and editing
-
-### Expected sections
-
-```markdown
-# Design Rules — {Project Name}
-
-## Layout
-- Screen horizontal padding: {inferred from library spacing scale}
-- Section gap: {inferred}
-- Max content width: {from platform preset}
-
-## Cards
-- Padding: {inferred from library}
-- Corner radius: {inferred from library}
-- Gap between cards: {inferred}
-- Background: {semantic variable name}
-
-## Typography hierarchy
-- Screen title: {largest text style}
-- Section header: {second largest}
-- Body: {base text style}
-- Caption: {smallest text style}
-- Max text sizes per screen: 3-4
-
-## Iconography
-- Default icon size: {inferred or 24x24}
-- Icon color: always semantic variables
-- Icon library: {detected or ask user}
-
-## Dark mode
-- Strategy: {from config.darkModeStrategy}
-- {any project-specific dark mode rules}
-
-## Component-specific rules
-- {rules inferred from component analysis}
-
-## Do NOT
-- {anti-patterns the designer wants to avoid}
-```
-
-### Fallback behavior
-
-If no design rules file exists (e.g., the user deleted it or skipped generation), workflows should:
-
-1. Use the library's spacing scale to infer padding/gap values (pick the most commonly used values)
-2. Use the library's radius scale for corner radii
-3. Follow the typography scale as-is
-4. Apply general best practices (consistent spacing, visual hierarchy, no raw values)
-5. **Never hardcode specific pixel values** — always derive from what's available in the library
-
----
-
-## Code Rules File
-
-The code rules file (`code-rules.md` by default) lives in the workspace folder alongside `config.json`. It is the code-facing counterpart to `design-rules.md`: rules the AI follows when **writing or maintaining code from Figma** (the `--to-code` half of `sync`, and any design-to-code handoff). Keeping it separate from `design-rules.md` avoids mixing two opposite audiences (designing *in* Figma vs. coding *from* Figma) in one document.
-
-### How it's generated
-
-During setup, after scanning the codebase: detect the styling system, token format, component directory conventions, and naming preset, then generate a draft with concrete, project-specific defaults. Present it to the user for review and editing.
-
-### Expected sections
-
-```markdown
-# Code Rules — {Project Name}
-
-## Component mapping
-- Always consult the component's component-mappings/{id}.json before generating code from a Figma node.
-- Translate Figma property values to code values via propertyMap.values (figmaValue → codeValue).
-- For figma-only components, do not invent code; flag them. For code-only, never expect a Figma node.
-
-## Naming & file conventions
-- Where new components go: {detected component dir}
-- File naming: {e.g. PascalCase.tsx}; one component per file; named exports
-
-## Props & types
-- Figma VARIANT → TypeScript union type ({"primary" | "secondary"})
-- Boolean property → boolean prop; TEXT → string prop; SLOT/INSTANCE_SWAP → children/ReactNode
-
-## Tokens in code
-- Canonical token format: {detected, e.g. CSS custom properties}
-- Always reference tokens (var(--token)) — never hardcode hex/px
-
-## Styling system
-- {Tailwind / CSS modules / styled-components} conventions, class ordering
-
-## Accessibility
-- Required a11y props per component type (role, label, min 44×44 touch target)
-
-## Do NOT
-- {anti-patterns: no inline styles, no detached values, no duplicate components}
-```
-
-### Fallback behavior
-
-If no code rules file exists, workflows should apply general best practices: follow the existing codebase conventions, use the project's canonical token format, never hardcode values that exist as tokens, and consult the relevant `component-mappings/{id}.json` for the code↔Figma correspondence.
-
----
-
-## Workspace Folder Structure
-
-The workspace can live in one of two locations, chosen during setup:
-
-**Project-level** (`workspaceLocation: "project"`):
-```
-{project-root}/.figma-suite/
-├── config.json                            # Project configuration (this schema)
-├── design-rules.md                        # Rules for designing in Figma (user-editable)
-├── code-rules.md                          # Rules for writing code from Figma (user-editable)
-├── token-map.generated.md                 # Library tokens → Figma variables
-├── component-contracts.generated.md       # Library components → Figma component sets
-└── component-mappings/                     # Code ↔ Figma mapping — one {id}.json per component
-    ├── _meta.json                          # schema version + last-generation timestamp (optional)
-    ├── button.json
-    └── …
-```
-
-**Global** (`workspaceLocation: "global"`):
-```
-<HOME>/.claude/figma-suite/{project-name}/
-├── config.json
-├── design-rules.md
-├── code-rules.md
-├── token-map.generated.md
-├── component-contracts.generated.md
-└── component-mappings/
-    ├── _meta.json
-    ├── button.json
-    └── …
-```
-
-`component-mappings/` holds the machine-readable code↔Figma mapping — one standalone `{id}.json` per component (statuses, plus property- and value-level mapping), named after its `id` slug. Each is Zod-validated — see [mapping-schema.md](mapping-schema.md) for the schema, examples, validation, the filename==id rule, and the Code Connect bridge.
-
-Project-level is default when inside a codebase. Global is default (and the only option) for standalone mode. The folder is named `{project-name}` (kebab-cased from `config.name`). If two global projects share a name, append a short hash.
+Written by `check-contract.mjs --write-state` after a clean sync: content hashes of every token source file, of each generated DESIGN.md block, and of each mapping file, plus `syncedAt`. A later hash mismatch means that piece changed outside a sync. It is machine-owned; never edit it by hand. Commit it with the workspace so teammates see the same freshness.

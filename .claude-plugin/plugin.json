@@ -1,11 +1,12 @@
 {
   "name": "figma-suite",
-  "version": "1.4.0",
-  "description": "Claude Code skill set for Figma — bidirectional token + component sync (Zod-validated code<->Figma mapping, Code Connect bridge), component library generation, screen design, and design system audits via the official Figma MCP server.",
+  "version": "2.0.0",
+  "description": "Keeps code and Figma in sync (tokens, components, a validated component mapping, DESIGN.md) and designs screens like a senior product designer, with an anti-slop gate. Builds on Figma's official skills via the Figma MCP server.",
   "author": {
     "name": "robukh"
   },
+  "homepage": "https://github.com/robukh/figma-suite",
+  "repository": "https://github.com/robukh/figma-suite",
   "license": "MPL-2.0",
-  "keywords": ["figma", "design-system", "components", "tokens", "design", "mcp"],
-  "skills": "./skills/"
+  "keywords": ["figma", "design-system", "components", "tokens", "design", "mcp", "design-md"]
 }

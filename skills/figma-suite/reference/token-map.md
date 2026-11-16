@@ -1,172 +1,134 @@
 # Token Format Mapping
 
-How different code token formats map to Figma variable collections, modes, and values.
+How code token formats map to Figma variable collections, modes, scopes and code syntax. Official `figma-generate-library` owns the Plugin API recipes for creating variables; this file owns the format-to-Figma translation rules.
+
+## Contents
+
+1. [Collection model](#collection-model)
+2. [Format rules](#format-rules)
+3. [Variable names](#variable-names)
+4. [Scopes by role](#scopes-by-role)
+5. [Code syntax](#code-syntax)
+6. [Token paths for DESIGN.md](#token-paths-for-designmd)
 
 ---
 
-## Supported Formats
+## Collection model
 
-### 1. W3C Design Token Format (DTF/DTCG)
-
-The W3C standard format using `$type`, `$value`, and `$description` fields.
-
-**File pattern:** `*.tokens.json`, `design-tokens/*.json`
-
-**Mapping:**
-
-| Code structure | Figma variable |
-|---------------|----------------|
-| File name `colors-light.tokens.json` | Semantic collection, Light mode |
-| File name `colors-dark.tokens.json` | Semantic collection, Dark mode |
-| File name `typography.tokens.json` | Typography collection |
-| File name `spacing*.tokens.json` | Spacing collection |
-| Token key `"background"` | Variable name `background` |
-| `$type: "color"` | Variable type: `COLOR` |
-| `$type: "number"` | Variable type: `FLOAT` |
-| `$type: "string"` | Variable type: `STRING` |
-| `$value.hex: "#ffffff"` | Color value `{ r: 1, g: 1, b: 1, a: 1 }` |
-| `$value` (number) | Float value |
-| `$description` | Variable description |
-
-**Color value conversion (DTF to Figma):**
-```
-DTF:   { "colorSpace": "srgb", "components": [r, g, b], "alpha": a, "hex": "#rrggbb" }
-Figma: { r: float_0_1, g: float_0_1, b: float_0_1, a: float_0_1 }
-
-Conversion: Use hex → parse to 0-1 floats
-  r = parseInt(hex.slice(1,3), 16) / 255
-  g = parseInt(hex.slice(3,5), 16) / 255
-  b = parseInt(hex.slice(5,7), 16) / 255
-```
-
-**Multi-mode strategy:**
-- Separate files per mode (e.g., `colors-light.json`, `colors-dark.json`)
-- Same token names in each file → same variable, different mode values
-- Non-color tokens (spacing, typography) → single "Value" mode
-
----
-
-### 2. Style Dictionary
-
-Token format used by Amazon Style Dictionary.
-
-**File pattern:** `tokens/**/*.json`, `properties/**/*.json`
-
-**Mapping:**
-
-| Code structure | Figma variable |
-|---------------|----------------|
-| Nested path `color.background.value` | Variable: `color/background` |
-| Category folder `color/` | Collection: Semantic |
-| Category folder `size/` | Collection: Spacing |
-| `"value": "#ffffff"` | Color value |
-| `"value": "16"` | Float value (parse string to number) |
-| `"type": "color"` | Variable type: `COLOR` |
-| `"comment"` | Variable description |
-
-**Alias resolution:**
-```json
-{ "value": "{color.primary.value}" }  →  Figma alias to the referenced variable
-```
-
----
-
-### 3. CSS Custom Properties
-
-Token values defined as CSS variables in `:root` and theme selectors.
-
-**File pattern:** `src/global.css`, `src/styles/globals.css`, `styles/variables.css`
-
-**Mapping:**
-
-| Code structure | Figma variable |
-|---------------|----------------|
-| `:root { --background: #fff }` | Semantic/background, Light mode |
-| `.dark { --background: #0a0a0a }` | Semantic/background, Dark mode |
-| `[data-theme="dark"]` | Same as `.dark` |
-| `@media (prefers-color-scheme: dark)` | Same as `.dark` |
-| Variable name `--surface-secondary` | Variable: `surface-secondary` |
-
-**Value parsing:**
-```
-#ffffff           → COLOR { r: 1, g: 1, b: 1 }
-rgb(255, 255, 255) → COLOR { r: 1, g: 1, b: 1 }
-hsl(0, 0%, 100%)  → COLOR (convert to RGB first)
-16px              → FLOAT 16 (strip unit)
-0.5rem            → FLOAT 8 (× 16)
-"Inter"            → STRING "Inter"
-```
-
----
-
-### 4. Tailwind Config
-
-Theme extension tokens in `tailwind.config.js` or `tailwind.config.ts`.
-
-**File pattern:** `tailwind.config.*`
-
-**Mapping:**
-
-| Code structure | Figma variable |
-|---------------|----------------|
-| `theme.extend.colors.background` | Semantic/background |
-| `theme.extend.fontSize['display']` | Typography/font-size-display |
-| `theme.extend.borderRadius['3xl']` | Spacing/radius-3xl |
-| `theme.extend.fontFamily.sans` | Typography/font-family-sans |
-| CSS var reference `var(--background)` | Resolve through CSS file |
-| Direct value `"#ffffff"` | Direct color value |
-
-**When Tailwind references CSS vars:**
-Tailwind often references CSS vars: `colors: { background: 'var(--background)' }`. In this case, resolve through the CSS file to get actual values per mode.
-
----
-
-### 5. JavaScript Theme Object
-
-Framework-specific theme files.
-
-**File pattern:** `theme.ts`, `theme.js`, `src/theme/*`
-
-**Mapping:**
-
-| Code structure | Figma variable |
-|---------------|----------------|
-| `theme.colors.background` | Semantic/background |
-| `theme.space[4]` or `theme.spacing.md` | Spacing/spacing-4 |
-| `theme.radii.lg` | Spacing/radius-lg |
-| `theme.fonts.body` | Typography/font-family-body |
-
----
-
-## Collection Organization
-
-Regardless of input format, tokens are organized into Figma collections:
+Two collections carry the meaning; non-color values sit in single-mode collections beside them.
 
 | Collection | Contents | Modes |
 |-----------|----------|-------|
-| **Primitives** | Raw color values, full palette | Value (single mode) |
-| **Semantic** | Purpose-named colors (background, foreground, accent...) | Light, Dark |
-| **Typography** | Font families, sizes, weights, line heights | Value (single mode) |
-| **Spacing** | Spacing values, border radii | Value (single mode) |
+| Primitives | raw palette: hex, px, font names | `Value` (one) |
+| Semantic | role-named colors that alias Primitives | `Light`, `Dark` (or the project's themes) |
+| Typography | font families, sizes, weights, line heights | `Value` |
+| Spacing | spacing scale and radii | `Value` |
 
-### When to use Primitives vs Semantic
-
-- **Primitives**: The base color palette (e.g., neutral-50 through neutral-950, brand colors with shade variants)
-- **Semantic**: Named by purpose, alias into Primitives (e.g., `background` → `Primitives/neutral-50` in Light, `Primitives/neutral-950` in Dark)
-
-If the project only has semantic tokens (no primitive palette), create a flat Semantic collection without a Primitives layer.
+Semantic variables alias a primitive and never hold a raw value, so a theme change edits one alias and not every consumer. A project with only semantic tokens and no palette gets a flat Semantic collection without Primitives. Choosing between tiers (and the optional component-token tier): [component-craft.md](component-craft.md#1-token-judgment).
 
 ---
 
-## Variable Naming Conventions
+## Format rules
 
-| Pattern | Example |
-|---------|---------|
-| Flat semantic | `background`, `foreground`, `accent` |
-| Grouped semantic | `surface/primary`, `surface/secondary`, `surface/elevated` |
-| Primitive with shade | `neutral/50`, `neutral/100`, `brand/500` |
+### W3C Design Tokens (DTCG)
+
+Files: `*.tokens.json`, `design-tokens/*.json`.
+
+| Code | Figma |
+|------|-------|
+| `colors-light.tokens.json` / `colors-dark.tokens.json` | Semantic collection, `Light` / `Dark` mode (same token names, one variable, two mode values) |
+| `typography.tokens.json`, `spacing*.tokens.json` | Typography, Spacing collections (`Value` mode) |
+| `$type: color` / `number` / `string` | `COLOR` / `FLOAT` / `STRING` |
+| `$value.hex` | color 0-1 floats: `r = parseInt(hex.slice(1,3),16)/255`, same for g, b |
+| `$description` | variable description |
+| `{group.token}` reference | alias to the referenced variable |
+
+Read the `hex` field, not `components`, so the value matches what the code ships.
+
+### Style Dictionary
+
+Files: `tokens/**/*.json`, `properties/**/*.json`.
+
+| Code | Figma |
+|------|-------|
+| nested path `color.background.value` | variable `color/background` |
+| category folder `color/` / `size/` | Semantic / Spacing collection |
+| `"value": "16"` | `FLOAT` 16 (parse the string) |
+| `"value": "{color.primary.value}"` | alias to the referenced variable |
+| `"comment"` | variable description |
+
+### CSS custom properties
+
+Files: `src/global.css`, `src/styles/globals.css`, `styles/variables.css`.
+
+| Code | Figma |
+|------|-------|
+| `:root { --background: #fff }` | `background`, `Light` mode |
+| `.dark`, `[data-theme="dark"]`, `@media (prefers-color-scheme: dark)` | same variable, `Dark` mode |
+| `--surface-secondary` | variable `surface-secondary` (drop the `--`) |
+
+Value parsing: `#fff`, `rgb()`, `hsl()` (convert to RGB first) -> `COLOR`; `16px` -> `FLOAT` 16; `0.5rem` -> `FLOAT` 8 (x16); quoted name -> `STRING`.
+
+### Tailwind config
+
+Files: `tailwind.config.*`. Read `theme.extend`: `colors.*` -> Semantic, `fontSize.*` -> `font-size/*`, `borderRadius.*` -> `radius/*`, `fontFamily.*` -> `font-family/*`. When a value is `var(--x)`, resolve it through the CSS file to get the per-mode values; a direct hex is used as-is.
+
+### JavaScript theme objects
+
+Files: `theme.ts`, `theme.js`, `src/theme/*`. `theme.colors.*` -> Semantic, `theme.space[4]` / `theme.spacing.md` -> `spacing/4`, `theme.radii.lg` -> `radius/lg`, `theme.fonts.body` -> `font-family/body`.
+
+---
+
+## Variable names
+
+Use `/` as the group separator so the Variables panel groups them. The naming preset ([naming-conventions.md](naming-conventions.md)) decides case and depth; mirror the code's nesting depth.
+
+| Kind | Example |
+|------|---------|
+| Primitive with shade | `neutral/50`, `brand/500` |
+| Flat or grouped semantic | `background`, `surface/secondary` |
 | Typography | `font-size/display`, `font-weight/bold`, `line-height/display` |
-| Spacing | `spacing/4`, `spacing/6` |
-| Radius | `radius/xl`, `radius/3xl` |
+| Spacing, radius | `spacing/4`, `radius/xl` |
 
-Use `/` as the group separator in Figma (creates visual grouping in the variables panel).
+Vendor prefixes (`--p-`, `--md-sys-`) belong in code syntax, not in the Figma name. Duplicate names within a collection are created silently, so check for an existing variable by name before creating.
+
+---
+
+## Scopes by role
+
+Scopes decide which pickers show a variable, so set them from the token's role and never leave `ALL_SCOPES`. These are the real enum values; `FILL_COLOR` does not exist.
+
+| Token role | Scopes |
+|-----------|--------|
+| Primitives (all) | `[]` (hidden from every picker) |
+| Surface / background | `FRAME_FILL`, `SHAPE_FILL` |
+| Text color | `TEXT_FILL` |
+| Border color | `STROKE_COLOR` |
+| Spacing (gap, padding) | `GAP`, `WIDTH_HEIGHT` (drop `WIDTH_HEIGHT` if the scale is not used for sizes) |
+| Radius | `CORNER_RADIUS` |
+| Font family / size / line height | `FONT_FAMILY` / `FONT_SIZE` / `LINE_HEIGHT` |
+| Font weight | `FONT_WEIGHT` (numeric) or `FONT_STYLE` (string like `Semi Bold`) |
+| Letter spacing | `LETTER_SPACING` |
+| Shadow color / semi-transparent overlay primitive | `EFFECT_COLOR` |
+| Opacity | `OPACITY` |
+
+`BOOLEAN` variables take no scopes. The full enum also includes `TEXT_CONTENT`, `ALL_FILLS`, `STROKE_FLOAT`, `EFFECT_FLOAT`, `PARAGRAPH_SPACING`, `PARAGRAPH_INDENT`.
+
+---
+
+## Code syntax
+
+Set `codeSyntax` on every variable, because Dev Mode and round-tripping read it.
+
+- `WEB` uses the `var()` wrapper: `var(--color-bg-primary)`, never bare `--color-bg-primary`, or Dev Mode shows the raw hex instead of the variable.
+- `ANDROID` and `iOS` take no wrapper (`colorBgPrimary`, `Color.bgPrimary`).
+- Use the original code identifier (the actual CSS variable, including any vendor prefix) rather than deriving it from the Figma name, so the two systems stay independent.
+- JS-theme projects with no CSS variables set `WEB` to the property path (`colors.gray.500`).
+
+Separators per platform: Figma `/` (`color/bg/primary`), CSS `-` (`--color-bg-primary`), JSON `.` (`color.bg.primary`), JS camelCase (`colorBgPrimary`). Sync converts between them using the naming preset.
+
+---
+
+## Token paths for DESIGN.md
+
+The token map is the source of the token path list that DESIGN.md front matter references as `{colors.name}`, `{typography.name}`, `{rounded.name}` and `{spacing.name}`. When setup generates `token-map.generated.md`, it also emits those four groups (colors, typography, rounded, spacing) with one path per token, taken from the Semantic tier for colors and from the scale names for the rest. A path that is not in the token map must not appear in DESIGN.md, and a token renamed here is renamed there.

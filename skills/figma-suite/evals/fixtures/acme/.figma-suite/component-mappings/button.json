@@ -1,0 +1,12 @@
+{
+  "id": "button",
+  "status": "matched",
+  "code": { "path": "src/components/ui/Button.tsx", "exportName": "Button", "props": ["style", "size", "disabled", "label"] },
+  "figma": { "fileKey": "LIBFILEKEY", "nodeId": "12:345", "componentName": "Button", "properties": ["Type", "Size", "Disabled", "Label"], "published": true },
+  "propertyMap": [
+    { "codeProp": "style", "figmaProp": "Type", "kind": "enum", "values": { "Primary": "primary", "Secondary": "secondary", "Ghost": "ghost" }, "required": true },
+    { "codeProp": "size", "figmaProp": "Size", "kind": "enum", "values": { "Sm": "sm", "Md": "md" } },
+    { "codeProp": "disabled", "figmaProp": "Disabled", "kind": "boolean" },
+    { "codeProp": "label", "figmaProp": "Label", "kind": "text" }
+  ]
+}

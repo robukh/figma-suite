@@ -1,200 +1,78 @@
 # Workflow: Design Screen
 
-Compose new screens or flows in Figma by reusing the published design system — components, variables, and styles.
+Design a screen or flow the way a senior product designer would: from the user's job and a content inventory, using the project's own components and tokens, subtracting before decorating, and reviewed by someone who did not build it. Figma's official skills own the mechanics; this workflow owns the judgment.
 
----
+**Contents:** [Load first](#load-first) · [Phases](#phases) · [Running the slop scan](#running-the-slop-scan) · [The critique loop](#the-critique-loop) · [Report](#report) · [Flows](#multi-screen-flows) · [Updating a screen](#updating-an-existing-screen) · [Prototyping](#prototyping-only-if-asked)
 
-## When to Use
+## Load first
 
-- "Design a settings page" — create from a text description
-- "Build the onboarding flow" — compose multiple connected screens
-- "Recreate this wireframe in Figma" — translate wireframe/sketch to high-fidelity design
-- "Update the dashboard layout" — modify an existing screen
+1. `figma-use` and `figma-generate-design` ([official-skills.md](../reference/official-skills.md)); `create_session` for the target design file.
+2. [craft-floor.md](../reference/craft-floor.md). Re-read it at the start of each major section, because long sessions drift back toward defaults.
+3. On demand: [anti-slop.md](../reference/anti-slop.md), [ux-checklist.md](../reference/ux-checklist.md), [critique-rubric.md](../reference/critique-rubric.md).
 
----
+## Phases
 
-## Phase 0: Understand the Screen
+**0. Load context.** Read the project snapshot: DESIGN.md, mapping files, config. If the contract is **STALE**, offer `sync` first. If DESIGN.md is missing, derive a flagged draft ([design-md.md](design-md.md)) and continue; do not block. Pick the mode from DESIGN.md, or by the brief: `operate` for work tools, `consumer` for mobile and lifestyle apps, `persuade` for marketing and landing pages, `read` for content. Pick the target design file (ask only if there are several).
 
-1. **Parse the user's request** — what screen, what content, what purpose
-2. **Check for existing specs** — look for:
-   - Feature specs in `docs/specs/` (if configured or discoverable)
-   - Wireframes in `docs/wireframes/` or `wireframes/`
-   - Existing code for the screen in the codebase
-3. **Check for existing Figma screens** — call `mcp__figma__get_metadata` to see if this screen already exists
-4. **Determine scope**:
-   - Single screen → build in one pass
-   - Multi-screen flow → build each screen, then connect with arrows/annotations
+**1. Brief.** One sentence each: user, job ("when ___ the user wants ___ so they can ___"), primary action, platform, success. Look for existing specs (`docs/specs/`, `docs/wireframes/`), code for the same screen, and an existing Figma screen (`get_metadata`). List the screen's states. **Write the brief-coverage list:** every item the brief asks for, plus the platform's chrome (mobile: status bar, home indicator, tab bar when the app has several top-level destinations, nav bar; web app: navigation shell; landing page: nav and footer). The main frame must show all of it, and the brief's central interaction in its populated state.
 
-Present the plan to the user before building.
+**2. Content inventory.** List every piece of content with its user need and a verdict: *must-say*, *can-defer*, *cut*. Pull real copy from specs; invent realistic data (short, typical, very long). Plan the state frames. **Checkpoint:** show the user the brief, the inventory and the structure from phase 3 in one compact message and get one go-ahead. After that, build without further questions unless something blocks. If no user can answer (an autonomous or delegated run), state your assumptions at the top of the report and continue; do not stall.
 
----
+**3. Structure plan.** Describe the layout in text: platform chrome, regions, order by priority, the one focal point, the one primary action, at most five content groups and four options per decision point, and how the screen fills its viewport with the content the product would really show. Then run the defaults review: "would I produce this for any similar screen?" Change what is generic. Check the plan against the ux-checklist (needs, states, flows).
 
-## Phase 1: Discover Design System
+**4. Hierarchy.** Choose the text styles per level (≤4 sizes on product screens; consumer and marketing screens may add one display size), spacing by role, and the alignment axis. Squint test the plan.
 
-Before building anything, inventory available design resources from all configured libraries (`config.libraries[]`).
+**5. Build.** Follow `figma-generate-design` for discovery (Code Connect → libraries → whole-frame inventory → gap search), for the wrapper frame, for componentizing repeats, and for the build in retry-safe phases. figma-suite specifics:
+- Resolve each code component to its Figma component through `component-mappings/{id}.json`; set variants and text through `propertyMap.values` (the code value `"primary"` becomes Figma `Type=Primary`). `figma-only` components are used as-is; `code-only` ones have no Figma node.
+- Respect DESIGN.md `components:` policy (allowed variants, icon policy) and `Project decisions`.
+- Bind every fill, stroke, radius, padding side and gap to the role-correct semantic variable; apply Text Styles; every container of related children is auto-layout ([component-craft.md](../reference/component-craft.md)).
+- Icons come from the design system's icon component or the codebase SVG. Use them where the platform or task expects them (tab bar, media controls, toolbars, scannable list rows). If the library lacks an icon you need, create a minimal icon component on your page (one stroke weight, 16/20/24 grid, `createNodeFromSvg`) rather than substituting text. Do not put one in every button.
+- Assert the product font family after building (the official skill's read-back).
+- Build the state frames from phase 2 next to the main screen, named `<Screen> / <state>` (for example `Team settings / Invite open`).
+- **When the system lacks something you need, do not flatten the design to fit.** A missing spacing tier or display type size: use an on-scale raw value (multiples of 4 or 8; landing pages need 64 to 120px section spacing and a display size), record it as an exception and report the library gap (offer `sync` or `build-library` afterwards). A missing component variant (for example a destructive Button): use the nearest variant, override only the minimum (a bound semantic color), record it, and propose the variant. Local helper components for repeated rows and missing icons are allowed on your own page (componentize repeats, per `figma-generate-design`); do not edit the library's components or variables during `design` unless asked.
+- **Platform chrome and density:** build the chrome from phase 1 (status bar, tab bar, nav) so the screen reads as a real app screen, and fill the viewport with realistic content; if the bottom third of a mobile screen is empty, something the product would show is missing.
+- A change to a main component may not reach instances that already carry overrides; re-check placed instances after editing a component.
 
-### Components
-For each library, call `mcp__figma__search_design_system` to find:
-- All published components and their variants
-- Component property definitions
-- Content regions — `INSTANCE_SWAP` properties and `SLOT` properties to fill
+**6. Mechanical gate.** Run the slop scan ([below](#running-the-slop-scan)). Fix every `error`; list `advisory` findings. A waiver needs a written reason and goes in the report (and in DESIGN.md `Project decisions` if it is a standing decision).
 
-**Index what's available across all libraries.** Never recreate a component that already exists in any library.
+**7. Subtract pass.** For each badge, border, subtitle, card, metric and repeated label ask "what is lost if this goes?" and remove what you can name as redundant or decorative, using the redundancy test in [anti-slop.md](../reference/anti-slop.md#icon-and-description-decision-tables). Never remove brief content, platform chrome or icons the platform expects. Finding nothing to remove is a valid result; log what you removed.
 
-### Variables
-For each library, call `mcp__figma__get_variable_defs` to get:
-- All color variables (light/dark modes)
-- Spacing variables
-- Typography variables
-- Radius variables
+**8. Critique.** The [critique loop](#the-critique-loop) in a fresh context.
 
-### Styles
-Check for text styles and effect styles that may exist independently of variables.
+**9. States and handoff.** Confirm the state frames exist (or are marked "n/a — reason"), add annotations only where behavior is not visible (interactions, open decisions), and write the report. One composition screenshot and one after a visual fix; the latest passing screenshot is final.
 
-### Design rules
-Read the project's `design-rules.md` from the workspace folder. Apply these rules throughout all phases.
+## Definition of done
 
-### Target file
-If `config.designFiles[]` has multiple entries, ask the user which design file to work in. If only one, use it directly.
+Before reporting, confirm each (a skipped item goes in "not verified"):
+- [ ] The brief-coverage list is fully visible in the main frame, including the platform chrome and the central interaction in its populated state.
+- [ ] The slop scan ran **after the last edit** with 0 errors (bans). Advisories are read, not all fixed.
+- [ ] The subtract pass ran and its removals (if any) are logged.
+- [ ] The critic reviewed in a fresh context; scores are reported as they are (advisory, not a gate) with the open findings.
+- [ ] The product font was asserted, and state frames exist or are marked n/a with a reason.
+- [ ] Project facts in DESIGN.md are validated (`check-contract.mjs --design-md <file>` when there is no workspace).
 
----
+## Running the slop scan
 
-## Phase 2: Create Page and Wrapper Frame
+1. Open `scripts/slop-scan.min.js` (same checks as the readable `slop-scan.js`, about a third smaller; the readable file is the source and what you read when a finding looks wrong). Set `ROOT_IDS` (the screen frame and its state frames; they must be on the same page), `PLATFORM` (`"desktop"` or `"touch"`), `CASING`, and optionally `ALLOW` (rule IDs waived with a reason). Edit only those constants.
+2. Run it through `use_figma` as the **whole** script (read-only; it returns `{ findings, counts, truncated }` and mutates nothing). Put every frame (screen and state frames) in `ROOT_IDS` so the scan runs once, then once more after the last edit. Do not paste a trimmed copy to save tokens: a partial scan is not a scan, and the checks you drop are the ones you will miss. It switches to the frame's page itself; check that `scanned` roughly matches the node count you expect.
+3. Fix `error` findings by editing the design, re-run. The scan is mechanical: it cannot judge taste, which is what phase 8 is for. Findings that look wrong are reported as such (a false positive tuned out via `ALLOW` with a reason), not silently ignored.
 
-1. **Create or navigate to the target page** in Figma
-   - If designing a new screen: create a page named after the screen (e.g., "Dashboard - Active")
-   - If updating: navigate to the existing page
-2. **Create a device frame** as the wrapper:
-   ```
-   Frame: "Screen Name"
-   Width: from config (default 393 for mobile, 1440 for web)
-   Height: from config (default 852 for mobile, 900 for web)
-   Fill: bound to Semantic/background variable
-   Auto-layout: vertical
-   Padding: 0
-   Clip content: true
-   ```
-3. Add status bar frame at top (use component instance if available)
+## The critique loop
 
----
+Follow [critique-rubric.md](../reference/critique-rubric.md): spawn the critic in a fresh context with the brief, DESIGN.md and the frame's `fileKey`/`nodeId`; it reviews before seeing scan output, scores six dimensions 0–4 and returns P0–P3 findings with rule IDs. Fix the highest-severity findings (related ones can go in the same round), at most two rounds, and ask the critic whether the new version is better than the previous one. Keep the better version.
 
-## Phase 3: Build Section by Section
+## Report
 
-Decompose the screen into logical sections. Build each one sequentially.
+Return a compact report: brief; what was reused (components, variables, styles); scan result (errors fixed, advisories, waivers); removals from the subtract pass; critic scores and open findings; **not verified** (dark mode, real data, prototype, other platforms). No lengthy narration.
 
-### For each section:
+## Multi-screen flows
 
-1. **Plan the section** — identify which components, tokens, and layout to use
-2. **Create a section frame** inside the wrapper — **always `figma.createAutoLayout()`, never `createFrame()` + absolute `x`/`y`**. Absolute coordinates position the wrapper on the canvas; auto-layout is what holds a section together when text reflows or content changes.
-   - Direction: vertical or horizontal as needed
-   - Padding bound to spacing variables
-   - Gap bound to spacing variables
-   - Fill: transparent or bound to surface variable
-3. **Place component instances** via `use_figma` (`component.createInstance()`)
-   - Set variant properties with `setProperties()` (e.g., `Variant=Primary, Size=Large`)
-   - Override text via TEXT properties — discover them first with `instance.componentProperties`, don't write `node.characters` on property-managed text
-   - Swap icons via INSTANCE_SWAP properties; fill freeform regions by `appendChild` onto the SLOT node (`setProperties` throws on a slot key)
-4. **Bind all visual properties to variables**:
-   - Background colors → Semantic variables
-   - Text colors → Semantic variables
-   - Spacing (padding, gap) → Spacing variables
-   - Corner radius → Radius variables
-   - Font properties → Typography variables
-5. **Screenshot and validate** the section:
-   - Call `mcp__figma__get_screenshot`
-   - Check alignment, spacing, visual balance
-   - Fix issues (max 3 iterations per section)
+Build each screen through phases 3–9, then check the flow: shortest path to the goal, entry/next/recovery on every screen, the same component behaving the same everywhere, consistent vocabulary, destructive steps confirmed once. Arrange left to right with a consistent gap, label transitions ("Tap Continue"), and group the screens in a named section. In FigJam use connectors; in Design files use arrows.
 
-### Section ordering (typical mobile screen)
+## Updating an existing screen
 
-```
-1. Status Bar (component instance or fixed frame)
-2. Navigation Bar (back button, title, action buttons)
-3. Hero / Header section
-4. Content sections (cards, lists, forms)
-5. Action area (primary/secondary buttons)
-6. Tab Bar (component instance) — for main tab screens only
-```
+Read it first (`get_design_context`/`get_metadata`) and screenshot it. Identify sections to add, change or remove; confirm before deleting anything. Prefer `swapComponent()` for compatible swaps, keep x/y/size of children in non-auto-layout parents, then run phases 6–8 on the result.
 
----
+## Prototyping (only if asked)
 
-## Phase 4: Polish
-
-After all sections are built:
-
-1. **Full-screen screenshot** — verify overall composition
-2. **Check spacing hierarchy** — outer containers should have proportionally more spacing than inner elements (~1.4x per nesting level, snapped to token grid)
-3. **Verify dark mode** — if the file has a dark mode page/variant, duplicate the screen and switch all variables to Dark mode values
-4. **Add annotations** (if requested):
-   - Screen name and purpose
-   - Key interactions (tap targets, gestures)
-   - Navigation connections to other screens
-5. **Responsive check** — if the design should work across sizes, test by resizing the wrapper frame
-
----
-
-## Phase 5: Multi-Screen Flows
-
-When designing a flow (e.g., onboarding, checkout):
-
-1. Build each screen following Phases 2-4
-2. Arrange screens left-to-right on the Figma canvas with consistent spacing (100px gap)
-3. Add flow arrows between screens:
-   - Use FigJam connectors if in FigJam
-   - Use line/arrow elements in Figma design files
-4. Label transitions (e.g., "Tap 'Continue'", "Swipe left")
-5. Group all screens into a section named after the flow
-
----
-
-## Design Rules
-
-The craft behind good screens — token choice, visual hierarchy, spacing rhythm, composition, iconography, and the master red-flag list — lives once in [design-judgment.md](../reference/design-judgment.md). **Read it before composing a screen.** The universal component mandates are in [SKILL.md "Component Creation Rules"](../SKILL.md#component-creation-rules); Plugin API details in [plugin-api-patterns.md](../reference/plugin-api-patterns.md). Below are only the screen-workflow-specific applications.
-
-### Project-specific rules
-
-Before building any screen, read the project's `design-rules.md` from the workspace folder (path in `config.designRulesPath`). This file contains the project's specific layout, spacing, typography, and component rules. Follow them.
-
-If no design rules file exists, infer sensible defaults from the library's variables:
-- Use the library's spacing scale to pick padding and gap values (prefer the most commonly used mid-range values)
-- Use the library's radius scale for corner radii
-- Follow the typography scale as-is
-- Apply general best practices (consistent spacing, visual hierarchy)
-
-### Screen-specific rules
-
-Apply [design-judgment.md §4 (Visual Hierarchy & Composition)](../reference/design-judgment.md#4-visual-hierarchy--composition) to every screen. The two that bite most often on screens:
-
-- **Typography hierarchy** — at most 3–4 text sizes per screen, all from the type scale (role-named Text Styles, never ad-hoc `15px`).
-- **Content-first** — realistic, domain-appropriate copy, never "Lorem ipsum". Pull actual copy from specs/wireframes when they exist.
-
-Then check the screen against the [§6 quality bar](../reference/design-judgment.md#6-the-quality-bar--what-a-senior-rejects-master-list) before declaring it done.
-
----
-
-## Updating Existing Screens
-
-When modifying a screen that already exists:
-
-1. **Read the current state** — call `mcp__figma__get_design_context` with the screen's nodeId
-2. **Take a screenshot** of the current state for reference
-3. **Identify what to change** — sections to add, remove, or modify
-4. **Work section by section**:
-   - For additions: create new section frame and place it
-   - For modifications: update properties on existing instances (prefer `swapComponent()` for compatible swaps)
-   - For removals: confirm with user before deleting any section
-5. **Preserve x/y/width/height** for elements in non-auto-layout parents
-6. **Screenshot and validate** after each change
-
----
-
-## Prototyping (Optional)
-
-If the user requests interactive prototyping:
-
-1. Set up prototype connections between screens using `use_figma`:
-   - Tap triggers on buttons and interactive elements
-   - Navigation actions (Navigate To, Back, Open Overlay)
-   - Transition animations (Smart Animate preferred, or Dissolve)
-2. Set a starting frame for the prototype
-3. Test the flow by describing the interaction sequence
+Add connections with `use_figma` (tap triggers, Navigate To / Back / Open Overlay, Smart Animate preferred), set the starting frame, and describe the interaction sequence. Motion states what changed; at most one authored moment; 150–250 ms for product UI.
