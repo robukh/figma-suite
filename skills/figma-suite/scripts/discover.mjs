@@ -3,7 +3,7 @@
 
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { findWorkspace, loadMappings, loadState, parseDesignMd, projectRootOf, readText, resolveDesignMd, tokenSourceFiles } from "./lib.mjs";
+import { findWorkspace, loadMappings, loadState, parseDesignMd, projectRootOf, readText, resolveDesignMd, setupChecklist, suiteVersion, tokenSourceFiles } from "./lib.mjs";
 
 const args = process.argv.slice(2);
 const i = args.indexOf("--project");
@@ -14,7 +14,8 @@ const line = (s = "") => out.push(s);
 try {
   const ws = findWorkspace(cwd);
   if (!ws) {
-    line("figma-suite workspace: NONE found -> run `setup` first");
+    line("figma-suite workspace: NONE found");
+    line("NEXT: setup");
     const hints = [];
     for (const p of ["design-tokens", "tokens", "tailwind.config.ts", "tailwind.config.js", "src/global.css", "src/styles/globals.css", "app/globals.css", "theme.ts", "theme.js", "DESIGN.md"]) {
       if (existsSync(join(cwd, p))) hints.push(p);
@@ -37,9 +38,9 @@ try {
     if (existsSync(dp)) {
       const d = parseDesignMd(readText(dp));
       line(`DESIGN.md: ${dp} | mode: ${d.data.mode ?? "?"} | components: ${Object.keys(d.data.components ?? {}).length} | sections: ${d.sections.length}`);
-    } else line(`DESIGN.md: MISSING (${dp}) -> run \`design-md\``);
+    } else line(`DESIGN.md: MISSING (${dp})`);
 
-      const state = loadState(ws.workspace);
+    const state = loadState(ws.workspace);
     const stale = [];
     if (!state) stale.push("no sync state yet");
     else if (state.corrupt) stale.push("state.json corrupt");
@@ -55,8 +56,13 @@ try {
         for (const [n, h] of Object.entries(d.blocks)) if (state.designMd?.blocks?.[n] && state.designMd.blocks[n] !== h) stale.push(`DESIGN.md generated block "${n}" hand-edited`);
       }
     }
-    line(`contract: ${stale.length ? `STALE -> ${stale.join("; ")}  (offer \`sync\` before design/audit)` : "fresh"}`);
+    line(`contract: ${stale.length ? `STALE -> ${stale.join("; ")}` : "fresh"}`);
     line(`last sync: ${state?.syncedAt ?? "never"}`);
+
+    const missing = setupChecklist(ws, projectRoot).filter((it) => !it.ok).map((it) => it.id);
+    const was = c.skill?.version ?? c.generatedAt?.slice(0, 10) ?? "unknown";
+    line(`figma-suite: ${suiteVersion() ?? "manual copy"} | workspace last set up with: ${was}`);
+    line(missing.length ? `NEXT: setup (upgrade; incomplete: ${missing.join(", ")})` : stale.length ? "NEXT: sync" : "NEXT: none (fresh)");
   }
 } catch (e) {
   line(`discover.mjs: ${e.message}`);

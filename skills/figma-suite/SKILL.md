@@ -46,14 +46,14 @@ figma-suite does not restate the Plugin API. Before any `use_figma` call, load `
 
 | `$ARGUMENTS` | Workflow | Must read |
 |---|---|---|
-| `setup` | [setup.md](workflows/setup.md) | config-schema, mapping-schema, design-md-template |
+| `setup` (also the upgrade from 1.x) | [setup.md](workflows/setup.md) | config-schema, mapping-schema, design-md-template |
 | `sync` (`--tokens`, `--components`, `--to-figma`, `--to-code`) | [sync.md](workflows/sync.md) | mapping-schema, token-map |
 | `build-library` | [build-library.md](workflows/build-library.md) | component-contracts, component-craft, plugin-api-deltas |
 | `design <description>` | [design-screen.md](workflows/design-screen.md) | craft-floor first; anti-slop, ux-checklist, critique-rubric on demand |
 | `design-md` | [design-md.md](workflows/design-md.md) | design-md-template, craft-floor |
 | `audit` | [audit.md](workflows/audit.md) | component-craft §6, anti-slop, critique-rubric |
 | `update-guide` | [update-guidelines.md](workflows/update-guidelines.md) | design-md-template |
-| *(none)* | If no workspace: `setup`. Otherwise show this menu and the snapshot. | |
+| *(none)* | Follow the snapshot's `NEXT:` line (`setup`, `sync` or `none`), then show this menu. | |
 
 ## The contract: one source of truth per fact
 
@@ -69,6 +69,7 @@ figma-suite does not restate the Plugin API. Before any `use_figma` call, load `
 
 - Contract check: `node "${CLAUDE_SKILL_DIR}/scripts/check-contract.mjs" [--project DIR] [--design-md FILE] [--strict] [--json]` — validates mappings and DESIGN.md and cross-checks them. Exit 1 = errors. `--design-md FILE` lints one DESIGN.md even when no workspace exists (mapping checks then only warn).
 - Record sync state (only after a clean sync): add `--write-state`.
+- Setup is done only when `check-contract.mjs --setup --write-state` exits 0: it also requires the workspace files, `DESIGN.md` and `state.json`, and no leftover `design-rules.md`.
 - Verify a component: paste `scripts/verify-component.js` into `use_figma` ([component-contracts.md](reference/component-contracts.md#verification)).
 - Scan a screen for slop: paste `scripts/slop-scan.min.js` into `use_figma` ([design-screen.md](workflows/design-screen.md)).
 
@@ -78,12 +79,13 @@ Workspace = `{project-root}/.figma-suite/` (default, shareable) or `<HOME>/.clau
 
 ## Safety rules (apply to every workflow)
 
-- **Dry-run, then approval.** Every write to code or Figma is first shown as a report. Reason: our changes cross two systems and are hard to unwind. Reads and `audit` need no approval.
+- **Dry-run, then approval** for writes to code or Figma (`sync`, `build-library`, `design`): show a report first. Reason: our changes cross two systems and are hard to unwind. Reads, `audit` and `setup` need no approval; `setup` writes only workspace files and `DESIGN.md`.
 - **Never delete** tokens, variables, components or pages without explicit confirmation; flag stale items instead.
 - **Preserve existing work.** Show the diff before editing code tokens; duplicate or snapshot a frame before overwriting it.
 - **Sequential writes, parallel reads.** `use_figma` writes run one at a time; independent per-page reads may fan out in one message.
 - **Retry contract.** Obey the error's `safeToRetryWithoutCanvasRead`: true → fix and retry; false → read the canvas first. Never repeat the same failing script.
 - **Evidence over claims.** Return created/mutated node IDs from every write; report verification tables and screenshots, not "done".
+- **Proactive by default.** Do the work, take the recommended default, mark it `inferred`, and ask once at the end. Do not stop to ask before writing files that do not exist yet.
 - **Ask well.** Use `AskUserQuestion` (recommended option first, at most 3 questions per round). Infer from code and Figma before asking; the user should only answer what cannot be derived. When no user can answer (an autonomous or delegated run), choose the recommended default, state the assumption in the report, and continue.
 
 ## Component rules (the floor)

@@ -2,13 +2,23 @@
 
 All notable changes to `figma-suite`.
 
+## 2.0.1
+
+Proactive setup and upgrade from 1.x.
+
+- `setup` is a numbered sequence that runs without questions and asks once at the end; it also upgrades a 1.x workspace (creates `DESIGN.md`, writes `state.json`). It no longer needs dry-run approval, because it writes only workspace files.
+- `check-contract.mjs --setup` is the "done" test: it fails until the workspace files, `DESIGN.md` and `state.json` exist and no active `design-rules.md` remains.
+- `discover.mjs` prints one `NEXT:` line (`setup`, `sync` or `none`) and the figma-suite version in use.
+- `design-md` writes the file first and interviews afterwards. Figma skill loads are required only before a `use_figma` write.
+- README: only one install may be active; a leftover skill folder can shadow the plugin.
+
 ## 2.0.0
 
 Aligned with Figma's current official skills, simplified from 4,711 to about 2,000 lines of markdown plus tested scripts, and extended with a connected design contract and a senior-designer screen workflow. The previous version is tagged `v1.4.0`.
 
 ### Breaking
 
-- **`design-rules.md` is replaced by a root `DESIGN.md`** (open DESIGN.md format: YAML tokens + prose, with figma-suite extensions). `setup` migrates an existing `design-rules.md` after asking. Config key `designRulesPath` becomes `designMdPath`.
+- **`design-rules.md` is replaced by a root `DESIGN.md`** (open DESIGN.md format: YAML tokens + prose, with figma-suite extensions). `setup` folds an existing `design-rules.md` into `DESIGN.md` and renames it to `design-rules.md.bak`. Config key `designRulesPath` becomes `designMdPath`.
 - **The zod validator is gone.** `schema/validate.mjs`, `schema/package.json` and the npm install step are removed. `scripts/check-contract.mjs` (zero dependencies) validates mappings and DESIGN.md and cross-checks them. Existing `component-mappings/{id}.json` files stay valid.
 - **`design-judgment.md` is now `component-craft.md`** (tokens, anatomy, variants, icons, the 12-row red-flag table). Screen-level composition and copy judgment moved to the new anti-slop layer.
 - **`plugin-api-patterns.md` (977 lines) is now `plugin-api-deltas.md` (146 lines)**; `figma-file-structure.md` is folded into `build-library.md` and `config-schema.md`.

@@ -15,9 +15,9 @@ Structure, ownership and rules: [design-md-template.md](../reference/design-md-t
    - Density from row heights and padding statistics; icon library from dependencies; golden reference screens as the most-instanced frames in the design files.
    - A Figma bindings block from `config.libraries`, collection names and component node ids.
 2. **Mark** every derived judgment `inferred`.
-3. **Ask** the few things that cannot be derived ([Interview](#interview)).
-4. **Write** DESIGN.md at `designMdPath`, then run the contract check; fix errors; run it with `--write-state` once clean.
-5. Show the user a short summary: the mode chosen, the icon/casing/card decisions recorded, and the items still `inferred`.
+3. **Write** DESIGN.md at `designMdPath` now, before any question. Run the contract check, fix errors, then run it with `--write-state` once clean.
+4. **Ask** the few things that cannot be derived ([Interview](#interview)), all in one batch, and write the answers into the file as *confirmed*. If no one can answer, the file stays `inferred`.
+5. Show a short summary: the mode chosen, the icon, casing and card decisions recorded, and the items still `inferred`.
 
 ## Refresh an existing DESIGN.md
 
@@ -27,7 +27,7 @@ Structure, ownership and rules: [design-md-template.md](../reference/design-md-t
 
 ## Interview
 
-At most three questions per round, recommended answer first (use `AskUserQuestion`). Ask only what cannot be derived:
+After the file is written. At most three questions per round, recommended answer first (use `AskUserQuestion`). Ask only what cannot be derived:
 
 1. **Product** — who uses it, what job, which mode (`operate` for tools used repeatedly; `consumer` for mobile and lifestyle apps; `persuade` for marketing; `read` for content). Three adjectives for how it should feel.
 2. **Taste decisions** — only those the code does not settle: icons in buttons (none / meaningful only / always), badge policy, card style (flat or bordered), casing, description density. Offer the best-system default as the recommended option.

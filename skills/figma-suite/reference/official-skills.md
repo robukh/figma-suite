@@ -42,10 +42,10 @@ figma-suite adds one step in front: read the project's `component-mappings/` so 
 | Freeform content regions | `figma-use` documents Slots; the library recipes do not use them | Per region: native `SLOT` for freeform content, `INSTANCE_SWAP` for a specific swappable child | Slots exist and fit authored content; swap fits a chosen component ([component-contracts.md](component-contracts.md#content-regions-slot-vs-instance_swap)) |
 | Typography binding | — | Bind variables on the Text Style, not on TextNodes | `TextStyle.setBoundVariable()` works; TextNode font properties are not bindable |
 | Token tier bound by consumers | Both tiers are bindable | Consumers bind the semantic tier; primitives are reference-only (scope `[]`) | Themeable and intent-carrying ([component-craft.md](component-craft.md#1-token-judgment)) |
-| Writing without asking | Not specified | Dry-run report and approval before any write in `sync`, `build-library`, `setup` | Our changes touch both code and Figma |
+| Writing without asking | Not specified | Dry-run report and approval before any write in `sync`, `build-library`, `design`. `setup` writes only workspace files and DESIGN.md and needs none | Our changes touch both code and Figma |
 
 Everything else (return values, color ranges, font loading, sizing enums, page rules, error contract, screenshot cadence) follows the official skills exactly. [plugin-api-deltas.md](plugin-api-deltas.md) records the few Plugin API facts we add.
 
 ## If a skill is unavailable
 
-If neither the plugin skill nor the `skill://` resource can be read, stop and tell the user: writing without the official rules is the main cause of hard-to-debug `use_figma` failures. Read-only work (audit, drift detection) can continue.
+If neither the plugin skill nor the `skill://` resource can be read, stop and tell the user before any `use_figma` write: writing without the official rules is the main cause of hard-to-debug `use_figma` failures. Work that needs no Figma (workspace files, DESIGN.md, `check-contract`, read-only audit) continues; say in the summary what was skipped.

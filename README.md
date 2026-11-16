@@ -33,13 +33,15 @@ claude plugin update figma-suite@figma-suite   # install the new version
 
 Then restart Claude Code, or run `/reload-plugins` in the open session. In the UI: `/plugin` → Installed → figma-suite → Update now. Third-party marketplaces do not auto-update by default; turn it on under `/plugin` → Marketplaces → figma-suite → Enable auto-update. Releases are tagged (`v2.0.0`, …); to stay on one, add the marketplace as `robukh/figma-suite#v2.0.0`.
 
+Only one copy may be installed. A skill folder from `npx skills add` or a manual copy (`~/.claude/skills/figma-suite`, `.claude/skills/figma-suite`) can load instead of the plugin, with the old workflow. If `/figma-suite` behaves like an older version, check the "Base directory for this skill" line in the skill header: it must point into `plugins/cache/figma-suite`. Remove the other copy.
+
 Other routes: `npx skills add robukh/figma-suite` (update with `npx skills update`), or copy `skills/figma-suite/` into `.claude/skills/` or `~/.claude/skills/` and re-copy to update.
 
 ## Usage
 
 ```
 /figma-suite                    # first run: setup; afterwards: menu + project snapshot
-/figma-suite setup              # scan code + Figma, write the workspace, draft DESIGN.md
+/figma-suite setup              # scan code + Figma, write the workspace and DESIGN.md (also upgrades 1.x); done when check-contract --setup passes
 /figma-suite sync               # tokens + components + mapping + DESIGN.md, one approval
 /figma-suite sync --tokens | --components | --to-figma | --to-code
 /figma-suite design <desc>      # design a screen or flow

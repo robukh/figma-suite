@@ -1,6 +1,6 @@
 {
   "name": "figma-suite",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Keeps code and Figma in sync (tokens, components, a validated component mapping, DESIGN.md) and designs screens like a senior product designer, with an anti-slop gate. Builds on Figma's official skills via the Figma MCP server.",
   "author": {
     "name": "robukh"

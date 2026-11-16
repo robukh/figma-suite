@@ -2,7 +2,8 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const sha = (text) =>
   "sha256:" + createHash("sha256").update(text).digest("hex").slice(0, 16);
@@ -433,4 +434,38 @@ export function loadState(workspace) {
   } catch {
     return { version: 1, corrupt: true };
   }
+}
+
+/** Version of the installed figma-suite plugin, or null for manual copies. */
+export function suiteVersion() {
+  try {
+    const p = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", ".claude-plugin", "plugin.json");
+    return JSON.parse(readText(p)).version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The definition of "setup is complete". Returns [{ id, ok, detail }]; check-contract --setup fails on any
+ * not-ok item and discover.mjs derives its NEXT line from the same list.
+ */
+export function setupChecklist(ws, projectRoot) {
+  const w = ws.workspace;
+  const c = ws.config ?? {};
+  const item = (id, ok, detail) => ({ id, ok, detail });
+  const mappings = loadMappings(join(w, "component-mappings"));
+  const state = loadState(w);
+  const designPath = resolveDesignMd(ws, projectRoot);
+  const rulesPath = isAbsolute(c.codeRulesPath ?? "") ? c.codeRulesPath : join(w, c.codeRulesPath ?? "code-rules.md");
+  const invalid = mappings.entries.filter((m) => m.errors.length).length;
+  return [
+    item("config", !ws.configError && (c.libraries?.length > 0 || c.designFiles?.length > 0), ws.configError ? `config.json unreadable: ${ws.configError}` : "config.json has no libraries or design files"),
+    item("mappings", !mappings.missingDir && mappings.entries.length > 0 && invalid === 0 && !mappings.metaError, mappings.missingDir ? "component-mappings/ missing" : invalid ? `${invalid} mapping file(s) invalid` : "no mapping files"),
+    item("generated-docs", ["token-map.generated.md", "component-contracts.generated.md"].every((f) => existsSync(join(w, f))), "token-map.generated.md or component-contracts.generated.md missing"),
+    item("code-rules", existsSync(rulesPath), "code-rules.md missing"),
+    item("design-md", existsSync(designPath), `DESIGN.md missing (${designPath})`),
+    item("legacy-design-rules", !existsSync(join(w, "design-rules.md")), "design-rules.md still present: fold it into DESIGN.md, then rename it to design-rules.md.bak"),
+    item("state", !!state && !state.corrupt, state?.corrupt ? "state.json is corrupt" : "state.json missing (written by check-contract --write-state)"),
+  ];
 }

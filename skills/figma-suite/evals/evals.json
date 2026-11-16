@@ -2,7 +2,7 @@
   "skill_name": "figma-suite",
   "description": "Behavior evals for figma-suite v2. Run with the skill-creator method: each case against old_skill (git tag v1.4.0), without_skill (official Figma skills only) and new_skill, 3 runs each. Cases marked needs_figma require a throwaway Figma file with a small design system (see README.md).",
   "gates": [
-    "No write to code or Figma before the user approves a dry-run report (sync, build-library, setup).",
+    "No write to code or Figma before the user approves a dry-run report (sync, build-library, design). Setup writes only workspace files and DESIGN.md and needs no approval.",
     "audit performs zero mutating use_figma calls.",
     "Nothing is deleted without explicit confirmation.",
     "check-contract.mjs exits 0 on everything the skill writes."
@@ -81,7 +81,7 @@
       "prompt": "Set up figma-suite for this project. (Run again after hand-editing a mapping file.)",
       "expected_output": "Workspace generated from inferred defaults with at most 3 questions; second run leaves hand edits untouched.",
       "assertions": [
-        "At most 3 questions asked; the Figma URLs are the only required input.",
+        "At most one question round, at the end; the Figma URLs are the only required input (and only when config.json has none).",
         "DESIGN.md draft derived from tokens and mappings, derived items marked inferred.",
         "Second run: the hand-edited component-mappings/{id}.json is byte-identical."
       ]
@@ -176,7 +176,25 @@
           "rename my layers"
         ]
       },
-      "assertions": ["Skill loaded for should_trigger prompts, not for should_not_trigger prompts (measure separately from compliance)."]
+      "assertions": [
+        "Skill loaded for should_trigger prompts, not for should_not_trigger prompts (measure separately from compliance)."
+      ]
+    },
+    {
+      "id": 13,
+      "name": "setup-upgrade-from-v1",
+      "needs_figma": false,
+      "fixture": "a copy of evals/fixtures/acme with DESIGN.md and state.json removed, a design-rules.md added and config.skill.version 1.4.0 (see contract.test.mjs)",
+      "prompt": "/figma-suite setup",
+      "expected_output": "The v1 workspace is upgraded in one run: DESIGN.md created, design-rules.md renamed to .bak, state.json written, one closing question.",
+      "assertions": [
+        "No question is asked before DESIGN.md exists.",
+        "At most one question round, at the end (mode, voice, icon policy).",
+        "design-rules.md is folded into DESIGN.md and renamed to design-rules.md.bak without asking.",
+        "Existing component-mappings/{id}.json and config values are byte-identical.",
+        "check-contract.mjs --setup --write-state exits 0 and its result is reported.",
+        "A failed or unavailable Figma scan is reported as skipped; the file work still completes."
+      ]
     }
   ]
 }

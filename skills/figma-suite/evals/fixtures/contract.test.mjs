@@ -1,7 +1,7 @@
 // check-contract.mjs against the Acme fixture: clean passes, seeded breaks are reported, freshness detects changes.
 
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, "../../scripts/check-contract.mjs");
 const fixture = join(here, "acme");
+const discover = join(here, "../../scripts/discover.mjs");
+const next = (dir) => (spawnSync(process.execPath, [discover, "--project", dir], { encoding: "utf8" }).stdout.match(/^NEXT: (.*)$/m) ?? [])[1];
 
 function fresh() {
   const dir = mkdtempSync(join(tmpdir(), "figma-suite-contract-"));
@@ -63,6 +65,33 @@ const dirs = [];
   expect("--strict turns warnings into failure", check(d, "--strict").code === 1);
   const blocked = (() => { edit(join(d, "DESIGN.md"), (t) => t.replace("## Overview", "## Intro")); return check(d, "--write-state"); })();
   expect("state is not written when errors exist", blocked.code === 1 && !blocked.ids.has("state-written"));
+}
+
+// setup: the done-test and the NEXT line
+{
+  const d = fresh(); dirs.push(d);
+  const ws = join(d, ".figma-suite");
+  expect("complete workspace without state.json fails only on state", (() => { const r = check(d, "--setup"); const bad = (r.out?.findings ?? []).filter((f) => f.id.startsWith("setup-")).map((f) => f.id); return r.code === 1 && bad.join() === "setup-state"; })());
+  const done = check(d, "--setup", "--write-state");
+  expect("--setup --write-state passes on a complete workspace", done.code === 0 && done.ids.has("state-written"));
+  expect("NEXT is none when fresh", next(d) === "none (fresh)");
+
+  // a 1.x workspace: no DESIGN.md, legacy design-rules.md, no state.json
+  const v1 = fresh(); dirs.push(v1);
+  const v1ws = join(v1, ".figma-suite");
+  rmSync(join(v1, "DESIGN.md"));
+  writeFileSync(join(v1ws, "design-rules.md"), "# Design rules\n\nSpacing 8px. No shadows.\n");
+  edit(join(v1ws, "config.json"), (t) => t.replace(/ *"designMdPath": "DESIGN.md",\n/, "").replace('"generatedAt"', '"skill": { "version": "1.4.0" },\n  "generatedAt"'));
+  expect("v1 workspace: NEXT is setup with the missing items", next(v1) === "setup (upgrade; incomplete: design-md, legacy-design-rules, state)");
+  const bad = check(v1, "--setup");
+  expect("v1 workspace fails --setup", bad.code === 1 && ["setup-design-md", "setup-legacy-design-rules", "setup-state"].every((id) => bad.ids.has(id)));
+  // what a finished upgrade looks like
+  cpSync(join(fixture, "DESIGN.md"), join(v1, "DESIGN.md"));
+  renameSync(join(v1ws, "design-rules.md"), join(v1ws, "design-rules.md.bak"));
+  const ok = check(v1, "--setup", "--write-state");
+  expect("upgraded v1 workspace passes --setup", ok.code === 0 && existsSync(join(v1ws, "state.json")));
+  expect("upgraded v1 workspace: NEXT is none", next(v1) === "none (fresh)");
+  expect("no workspace: NEXT is setup", next(mkdtempSync(join(tmpdir(), "figma-suite-empty-"))) === "setup");
 }
 
 // standalone lint of a lone DESIGN.md (no workspace)

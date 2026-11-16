@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Checks token sources <-> DESIGN.md <-> component-mappings/*.json.
 //   node check-contract.mjs [--workspace DIR] [--project DIR] [--design-md FILE] [--json] [--strict]
-//                           [--write-state] [--force] [--no-freshness]
+//                           [--write-state] [--force] [--no-freshness] [--setup]
 // Exit: 0 ok, 1 errors (or warnings with --strict), 2 usage. --write-state records hashes after a clean sync.
+// --setup also requires the whole workspace to exist (the "done" test for setup).
 
 import { existsSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -19,6 +20,8 @@ import {
   readText,
   resolveDesignMd,
   resolveRef,
+  setupChecklist,
+  suiteVersion,
   tokenSourceFiles,
 } from "./lib.mjs";
 
@@ -30,7 +33,7 @@ const opt = (n) => {
 };
 
 if (flag("--help") || flag("-h")) {
-  console.log("usage: node check-contract.mjs [--workspace DIR] [--project DIR] [--json] [--strict] [--write-state] [--force] [--no-freshness]");
+  console.log("usage: node check-contract.mjs [--workspace DIR] [--project DIR] [--json] [--strict] [--write-state] [--force] [--no-freshness] [--setup]");
   process.exit(0);
 }
 
@@ -157,6 +160,7 @@ if (!existsSync(designPath)) {
 const tokenFiles = tokenSourceFiles(config, projectRoot);
 const currentState = {
   version: 1,
+  suiteVersion: suiteVersion(),
   syncedAt: new Date().toISOString(),
   tokens: { files: tokenFiles },
   designMd: { blocks: design?.blocks ?? {} },
@@ -180,13 +184,9 @@ if (!flag("--no-freshness")) {
   }
 }
 
-// output
-const errors = findings.filter((f) => f.level === "error");
-const warns = findings.filter((f) => f.level === "warn");
-const failed = errors.length > 0 || (flag("--strict") && warns.length > 0);
-
+// state.json is written first (only after a clean lint), so the setup checklist below can count it
 if (flag("--write-state")) {
-  if (errors.length && !flag("--force")) {
+  if (findings.some((f) => f.level === "error") && !flag("--force")) {
     console.error("Not writing state.json: fix the errors first (or pass --force).");
   } else {
     writeFileSync(join(ws.workspace, "state.json"), JSON.stringify(currentState, null, 2) + "\n");
@@ -194,9 +194,20 @@ if (flag("--write-state")) {
   }
 }
 
+let checklist = null;
+if (flag("--setup")) {
+  checklist = setupChecklist(ws, projectRoot);
+  for (const it of checklist) if (!it.ok) add("error", `setup-${it.id}`, "workspace", it.detail);
+}
+
+const errors = findings.filter((f) => f.level === "error");
+const warns = findings.filter((f) => f.level === "warn");
+const failed = errors.length > 0 || (flag("--strict") && warns.length > 0);
+
 if (flag("--json")) {
-  console.log(JSON.stringify({ workspace: ws.workspace, designMd: design ? designPath : null, ok: !failed, errors: errors.length, warnings: warns.length, findings }, null, 2));
+  console.log(JSON.stringify({ workspace: ws.workspace, designMd: design ? designPath : null, ok: !failed, setup: checklist, errors: errors.length, warnings: warns.length, findings }, null, 2));
 } else {
+  for (const it of checklist ?? []) console.log(`${it.ok ? "PASS" : "FAIL"}  setup: ${it.id}`);
   for (const f of findings) console.log(`[${f.level}] ${f.id}  ${f.where}: ${f.message}`);
   const n = mapping.entries.length;
   console.log(failed ? `\nContract check FAILED — ${errors.length} error(s), ${warns.length} warning(s), ${n} mapping file(s).` : `\nContract OK — ${n} mapping file(s), ${warns.length} warning(s).`);
