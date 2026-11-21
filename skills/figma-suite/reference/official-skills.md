@@ -17,7 +17,7 @@ figma-suite does not copy Figma's Plugin API guidance. It loads Figma's own skil
 
 Each is available as the Figma plugin's skill, or as an MCP resource at `skill://figma/<name>/SKILL.md` (references at `skill://figma/<name>/references/<file>.md`). Prefer the plugin copy; fall back to the resource. The live resource is the authority when anything here disagrees.
 
-Some sessions and subagents have no MCP resource reader (`ReadMcpResourceTool` missing). Then read the plugin's cached copy: `<HOME>/.claude/plugins/cache/claude-plugins-official/figma/<version>/skills/<name>/SKILL.md` (and its `references/`). Pass `skillNames` without the `resource:` prefix in that case. A cached copy can lag the live one; say so in the report if you relied on it.
+Some sessions and subagents have no MCP resource reader. OpenCode exposes `list_mcp_resources` and `read_mcp_resource`; Claude Code uses `ReadMcpResourceTool`. If neither is available, check whether the Figma plugin's skills were installed into a host skill directory (for example `~/.claude/skills/` or `~/.agents/skills/`) and load them with the host's skill tool. In Claude Code, the cached copy is at `<HOME>/.claude/plugins/cache/claude-plugins-official/figma/<version>/skills/<name>/SKILL.md` (and its `references/`). Pass `skillNames` without the `resource:` prefix when a skill came from a local copy. A cached copy can lag the live one; say so in the report if you relied on it.
 
 ## Session and logging parameters
 

@@ -380,10 +380,11 @@ export function findWorkspace(cwd, explicit) {
   if (explicit) return tryDir(resolve(explicit));
   const proj = tryDir(join(cwd, ".figma-suite"));
   if (proj) return proj;
-  const g = join(home(), ".claude", "figma-suite");
-  if (existsSync(g)) {
-    for (const name of readdirSync(g)) {
-      const d = join(g, name);
+  // Host-neutral location first; keep the old Claude-specific location as a fallback for existing workspaces.
+  for (const base of [join(home(), ".figma-suite"), join(home(), ".claude", "figma-suite")]) {
+    if (!existsSync(base)) continue;
+    for (const name of readdirSync(base)) {
+      const d = join(base, name);
       if (!statSync(d).isDirectory()) continue;
       const w = tryDir(d);
       if (w?.config?.projectPath && resolve(w.config.projectPath) === resolve(cwd)) return w;

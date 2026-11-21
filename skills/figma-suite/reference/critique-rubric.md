@@ -47,7 +47,7 @@ Each finding: **severity** (P0 blocks use or breaks the system · P1 clearly wro
 >
 > Do not praise. Do not invent problems to look thorough; "none found" is a valid result for a dimension.
 
-If the `Agent` tool is unavailable, run the same steps yourself after clearing your assumptions: re-read only the brief and DESIGN.md, take a fresh screenshot, and state that the review was not independent.
+Run the critique in a fresh-context subagent when the host provides one (Claude Code: `Agent`; OpenCode: its subagent tool). If no subagent tool is available, run the same steps yourself after clearing your assumptions: re-read only the brief and DESIGN.md, take a fresh screenshot, and state that the review was not independent.
 
 ## Calibration
 

@@ -1,7 +1,7 @@
 // check-contract.mjs against the Acme fixture: clean passes, seeded breaks are reported, freshness detects changes.
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,28 @@ function fresh() {
   const dir = mkdtempSync(join(tmpdir(), "figma-suite-contract-"));
   cpSync(fixture, dir, { recursive: true });
   return dir;
+}
+function discoverAt(dir, homeDir) {
+  return spawnSync(process.execPath, [discover, "--project", dir], {
+    encoding: "utf8",
+    env: { ...process.env, USERPROFILE: homeDir, HOME: homeDir },
+  }).stdout;
+}
+function globalWorkspace(kind = "neutral") {
+  const root = mkdtempSync(join(tmpdir(), "figma-suite-global-"));
+  dirs.push(root);
+  const project = join(root, "project");
+  const homeDir = join(root, "home");
+  cpSync(fixture, project, { recursive: true });
+  const target = join(homeDir, ...(kind === "legacy" ? [".claude", "figma-suite"] : [".figma-suite"]), kind === "legacy" ? "acme-legacy" : "acme");
+  mkdirSync(join(target, ".."), { recursive: true });
+  cpSync(join(project, ".figma-suite"), target, { recursive: true });
+  const cfgPath = join(target, "config.json");
+  const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
+  cfg.projectPath = project;
+  writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+  rmSync(join(project, ".figma-suite"), { recursive: true, force: true });
+  return { root, project, homeDir, target };
 }
 function check(dir, ...extra) {
   const r = spawnSync(process.execPath, [script, "--project", dir, "--json", ...extra], { encoding: "utf8" });
@@ -101,6 +123,42 @@ const dirs = [];
   const r = spawnSync(process.execPath, [script, "--design-md", join(d, "DESIGN.md"), "--project", d, "--json"], { encoding: "utf8" });
   const out = JSON.parse(r.stdout);
   expect("--design-md lints a lone file (exit 0, mappings only warn)", r.status === 0 && out.errors === 0 && out.findings.some((f) => f.id === "component-no-mapping" && f.level === "warn"));
+}
+
+// global workspace discovery: host-neutral, legacy fallback, and precedence
+{
+  const neutral = globalWorkspace();
+  const out = discoverAt(neutral.project, neutral.homeDir);
+  expect("discovers a host-neutral global workspace", out.includes(`workspace: ${neutral.target}`));
+
+  const legacy = globalWorkspace("legacy");
+  const legacyOut = discoverAt(legacy.project, legacy.homeDir);
+  expect("discovers a legacy ~/.claude global workspace", legacyOut.includes(`workspace: ${legacy.target}`));
+
+  // Both locations exist for the same project: the host-neutral copy wins.
+  mkdirSync(join(neutral.homeDir, ".claude", "figma-suite"), { recursive: true });
+  cpSync(neutral.target, join(neutral.homeDir, ".claude", "figma-suite", "acme-legacy"), { recursive: true });
+  const precedenceOut = discoverAt(neutral.project, neutral.homeDir);
+  expect("host-neutral global workspace wins over legacy", precedenceOut.includes(`workspace: ${neutral.target}`));
+
+  // Project-level workspaces still take precedence over either global location.
+  cpSync(neutral.target, join(neutral.project, ".figma-suite"), { recursive: true });
+  const projectOut = discoverAt(neutral.project, neutral.homeDir);
+  expect("project-level workspace wins over global", projectOut.includes(`workspace: ${join(neutral.project, ".figma-suite")}`));
+}
+
+// Installed layout: the skill works when copied to .agents/skills/ without .claude-plugin/.
+{
+  const root = mkdtempSync(join(tmpdir(), "figma-suite-installed-"));
+  dirs.push(root);
+  const installed = join(root, ".agents", "skills", "figma-suite");
+  cpSync(join(here, "../.."), installed, { recursive: true });
+  const project = join(root, "project");
+  cpSync(fixture, project, { recursive: true });
+  const out = spawnSync(process.execPath, [join(installed, "scripts", "discover.mjs"), "--project", project], { encoding: "utf8" }).stdout;
+  expect("installed copy finds its scripts and reports a manual copy", out.includes(`workspace: ${join(project, ".figma-suite")}`) && out.includes("figma-suite: manual copy"));
+  const r = spawnSync(process.execPath, [join(installed, "scripts", "check-contract.mjs"), "--project", project, "--json"], { encoding: "utf8" });
+  expect("installed copy's contract check passes", r.status === 0);
 }
 
 for (const d of dirs) rmSync(d, { recursive: true, force: true });

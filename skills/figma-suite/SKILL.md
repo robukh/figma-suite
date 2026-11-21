@@ -32,15 +32,21 @@ metadata:
 
 Connects a codebase design system to Figma and keeps the two honest. It adds four things on top of Figma's official skills: a **code ↔ Figma contract** (tokens, component mapping, DESIGN.md that stay in sync), **sync** across it, a **senior-designer screen workflow** with an anti-slop gate, and **audit**.
 
-Project snapshot (blank if shell commands are disabled; then run `node "${CLAUDE_SKILL_DIR}/scripts/discover.mjs"` yourself):
+## Start: project snapshot
 
-!`node "${CLAUDE_SKILL_DIR}/scripts/discover.mjs" || true`
+Resolve `<skill-dir>` to the absolute base directory shown when this skill was loaded. Before routing, run:
+
+```sh
+node "<skill-dir>/scripts/discover.mjs"
+```
+
+It never writes and prints one `NEXT:` line. If shell commands are disabled, inspect the workspace and token/design hints yourself. In Claude Code, `${CLAUDE_SKILL_DIR}` may be substituted for `<skill-dir>` in commands.
 
 > Load only the workflow and references you are executing. They are large.
 
 ## Load Figma's skills first
 
-figma-suite does not restate the Plugin API. Before any `use_figma` call, load `figma-use`; before changing anything visible also `figma-generate-design`; for components/variables also `figma-generate-library`. Call `create_session` before file tools. Details, discovery order and where we override: [official-skills.md](reference/official-skills.md). If the Figma MCP server is missing: `claude plugin install figma@claude-plugins-official`, or add `https://mcp.figma.com/mcp` and authenticate via OAuth.
+figma-suite does not restate the Plugin API. Before any `use_figma` call, load `figma-use`; before changing anything visible also `figma-generate-design`; for components/variables also `figma-generate-library`. Call `create_session` before file tools. Details, discovery order and where we override: [official-skills.md](reference/official-skills.md). If the Figma MCP server is missing, add the remote server `https://mcp.figma.com/mcp` and authenticate via OAuth. In Claude Code: `claude plugin install figma@claude-plugins-official` installs the server and its official skills. In OpenCode: `opencode mcp add figma --url https://mcp.figma.com/mcp`, then use `/mcps` to sign in. Tool names may carry a host prefix (for example `mcp__figma__use_figma` in Claude Code or `figma_use_figma` in OpenCode); refer to the tool by its Figma operation name in this skill.
 
 ## Workflow router
 
@@ -67,7 +73,7 @@ figma-suite does not restate the Plugin API. Before any `use_figma` call, load `
 
 ### Commands (defined once; workflows say "run the contract check")
 
-- Contract check: `node "${CLAUDE_SKILL_DIR}/scripts/check-contract.mjs" [--project DIR] [--design-md FILE] [--strict] [--json]` — validates mappings and DESIGN.md and cross-checks them. Exit 1 = errors. `--design-md FILE` lints one DESIGN.md even when no workspace exists (mapping checks then only warn).
+- Contract check: `node "<skill-dir>/scripts/check-contract.mjs" [--project DIR] [--design-md FILE] [--strict] [--json]` — validates mappings and DESIGN.md and cross-checks them. Exit 1 = errors. `--design-md FILE` lints one DESIGN.md even when no workspace exists (mapping checks then only warn).
 - Record sync state (only after a clean sync): add `--write-state`.
 - Setup is done only when `check-contract.mjs --setup --write-state` exits 0: it also requires the workspace files, `DESIGN.md` and `state.json`, and no leftover `design-rules.md`.
 - Verify a component: paste `scripts/verify-component.js` into `use_figma` ([component-contracts.md](reference/component-contracts.md#verification)).
@@ -75,7 +81,7 @@ figma-suite does not restate the Plugin API. Before any `use_figma` call, load `
 
 ## Workspace and discovery
 
-Workspace = `{project-root}/.figma-suite/` (default, shareable) or `<HOME>/.claude/figma-suite/{project-name}/` (personal; always for standalone). `discover.mjs` finds it, `config.json` describes it. Token sources are auto-discovered in this order: `design-tokens/*.tokens.json` (W3C DTCG) → `tokens/**/*.json` (Style Dictionary) → `tailwind.config.*` → CSS custom properties (`src/global.css`, `src/styles/globals.css`) → `theme.ts|js`. A project may reference several libraries and design files.
+Workspace = `{project-root}/.figma-suite/` (default, shareable) or `<HOME>/.figma-suite/{project-name}/` (personal; always for standalone). Existing workspaces under `<HOME>/.claude/figma-suite/` remain discoverable as a legacy fallback. `discover.mjs` finds it, `config.json` describes it. Token sources are auto-discovered in this order: `design-tokens/*.tokens.json` (W3C DTCG) → `tokens/**/*.json` (Style Dictionary) → `tailwind.config.*` → CSS custom properties (`src/global.css`, `src/styles/globals.css`) → `theme.ts|js`. A project may reference several libraries and design files.
 
 ## Safety rules (apply to every workflow)
 
@@ -86,7 +92,7 @@ Workspace = `{project-root}/.figma-suite/` (default, shareable) or `<HOME>/.clau
 - **Retry contract.** Obey the error's `safeToRetryWithoutCanvasRead`: true → fix and retry; false → read the canvas first. Never repeat the same failing script.
 - **Evidence over claims.** Return created/mutated node IDs from every write; report verification tables and screenshots, not "done".
 - **Proactive by default.** Do the work, take the recommended default, mark it `inferred`, and ask once at the end. Do not stop to ask before writing files that do not exist yet.
-- **Ask well.** Use `AskUserQuestion` (recommended option first, at most 3 questions per round). Infer from code and Figma before asking; the user should only answer what cannot be derived. When no user can answer (an autonomous or delegated run), choose the recommended default, state the assumption in the report, and continue.
+- **Ask well.** Use the host's question UI when available (Claude Code: `AskUserQuestion`; OpenCode: its interactive question tool), with the recommended option first and at most 3 questions per round. If the host has no question tool, ask a short numbered question in plain text. Infer from code and Figma before asking; the user should only answer what cannot be derived. When no user can answer (an autonomous or delegated run), choose the recommended default, state the assumption in the report, and continue.
 
 ## Component rules (the floor)
 

@@ -9,9 +9,9 @@ The project config and the workspace folder around it. Every workflow resolves t
 | Location | Path | Default for |
 |---|---|---|
 | Project-level | `{project-root}/.figma-suite/` | codebase projects (shareable via git) |
-| Global | `<HOME>/.claude/figma-suite/{project-name}/` | standalone (no codebase); personal setups |
+| Global | `<HOME>/.figma-suite/{project-name}/` | standalone (no codebase); personal setups |
 
-`<HOME>` is `~` on macOS/Linux and `%USERPROFILE%` on Windows. A global folder is named by the kebab-cased project name, not a Figma file key, because a project can span several Figma files. Discovery order: project-level first, then global matching `projectPath`.
+`<HOME>` is `~` on macOS/Linux and `%USERPROFILE%` on Windows. A global folder is named by the kebab-cased project name, not a Figma file key, because a project can span several Figma files. Discovery order: project-level first, then `~/.figma-suite/` matching `projectPath`, then the legacy `~/.claude/figma-suite/` location. Existing workspaces there need no migration; newly created global workspaces use the host-neutral path.
 
 ```
 {workspace}/

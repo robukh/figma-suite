@@ -6,11 +6,11 @@ Builds or upgrades the workspace every other workflow depends on: config, token 
 
 Load [official-skills.md](../reference/official-skills.md) only for step 4. Schemas: [config-schema.md](../reference/config-schema.md), [mapping-schema.md](../reference/mapping-schema.md), [design-md-template.md](../reference/design-md-template.md).
 
-**Done when** `node "${CLAUDE_SKILL_DIR}/scripts/check-contract.mjs" --setup --write-state` exits 0. Never report setup as finished without that result.
+**Done when** `node "<skill-dir>/scripts/check-contract.mjs" --setup --write-state` exits 0. Never report setup as finished without that result. Resolve `<skill-dir>` to the base directory shown when the skill was loaded; in Claude Code, `${CLAUDE_SKILL_DIR}` may be substituted.
 
 ## Steps
 
-1. **Detect.** Read the `NEXT:` line of the snapshot (`discover.mjs`). `setup (upgrade; incomplete: ...)` means a workspace exists but items are missing: continue with the steps below on top of it. Mode is `codebase` when the directory has `package.json`, `pyproject.toml`, `Cargo.toml`, `.git` or sources (workspace `{project}/.figma-suite/`), else `standalone` (workspace `~/.claude/figma-suite/{project}/`, no `--to-code`).
+1. **Detect.** Read the `NEXT:` line of the snapshot (`discover.mjs`). `setup (upgrade; incomplete: ...)` means a workspace exists but items are missing: continue with the steps below on top of it. Mode is `codebase` when the directory has `package.json`, `pyproject.toml`, `Cargo.toml`, `.git` or sources (workspace `{project}/.figma-suite/`), else `standalone` (workspace `~/.figma-suite/{project}/`, no `--to-code`).
    *Verify:* you can name the mode and the workspace path.
 2. **Read what exists.** Load `config.json` and use its `libraries` and `designFiles`. Ask for Figma URLs only when both arrays are empty; then extract `fileKey` from each URL and call `get_metadata` for the name.
    *Verify:* at least one library or design file is known.
@@ -21,7 +21,7 @@ Load [official-skills.md](../reference/official-skills.md) only for step 4. Sche
 6. **Create `DESIGN.md`** at `designMdPath` (default: project root) by following [design-md.md](design-md.md), Create. Fold in `design-rules.md` if it exists (layout, typography, iconography, "do not"), then rename it to `design-rules.md.bak`. If `DESIGN.md` already exists, refresh only the generated blocks and list proposed edits to authored sections in the summary.
    *Verify:* the file exists and parses.
 7. **Check and record state.** Run the "Done when" command. Fix every error it prints and run it again.
-8. **Summarize and ask once.** About ten lines: mode, workspace path, libraries and design files, token and component counts, mapping status counts, files written, items marked `inferred`, anything skipped and why, and what changed from 1.x. Then ask one batched question (`AskUserQuestion`, recommended first): confirm the `mode`, the voice (casing, banned words) and the icon policy, or give corrections. Write the answers into `DESIGN.md` Project decisions as *confirmed*. Next steps to offer: `sync`, `build-library`, `design`.
+8. **Summarize and ask once.** About ten lines: mode, workspace path, libraries and design files, token and component counts, mapping status counts, files written, items marked `inferred`, anything skipped and why, and what changed from 1.x. Then ask one batched question with the host's question UI when available (recommended option first): confirm the `mode`, the voice (casing, banned words) and the icon policy, or give corrections. Write the answers into `DESIGN.md` Project decisions as *confirmed*. Next steps to offer: `sync`, `build-library`, `design`.
 
 ## Inferred defaults
 
@@ -37,4 +37,4 @@ Load [official-skills.md](../reference/official-skills.md) only for step 4. Sche
 
 - **Hand work is never overwritten:** existing config values, mapping files, `code-rules.md` and authored `DESIGN.md` sections stay as they are. Missing files are not hand work: create them without asking.
 - **Re-running** is the same sequence: re-scan, update generated files, add new mapping files, report what changed.
-- Each global project has its own workspace folder (`~/.claude/figma-suite/*/config.json`); they never interfere.
+- Each global project has its own workspace folder (`~/.figma-suite/*/config.json`; existing `~/.claude/figma-suite/*/config.json` workspaces are still found); they never interfere.

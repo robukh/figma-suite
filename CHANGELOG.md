@@ -2,6 +2,22 @@
 
 All notable changes to `figma-suite`.
 
+## 2.1.0
+
+Portable OpenCode support.
+
+### Added
+
+- **OpenCode installation.** `npx skills add robukh/figma-suite --skill figma-suite -a opencode` installs the same skill OpenCode already discovers under `.agents/skills/`. The README covers project/global installs, updates, duplicate-copy avoidance, and Figma MCP setup with `opencode mcp add figma --url https://mcp.figma.com/mcp`.
+- **Optional `/figma-suite` parity.** `opencode/commands/figma-suite.md` is a thin launcher for `.opencode/commands/` or `~/.config/opencode/commands/`; all workflow logic stays in the shared skill.
+
+### Changed
+
+- **Host-neutral skill commands.** Instructions resolve scripts from the skill's loaded base directory instead of depending on `CLAUDE_SKILL_DIR` expansion. The automatic project snapshot now always names the command to run, so hosts without inline shell expansion work the same way.
+- **Host-neutral tool guidance.** Questions, independent critic reviews, MCP resource reads, and Figma MCP tool names now describe the Claude Code and OpenCode forms instead of assuming Claude-only tools.
+- **Host-neutral global workspaces.** New personal workspaces use `~/.figma-suite/{project}/`. Existing `~/.claude/figma-suite/{project}/` workspaces remain discoverable as a legacy fallback and need no migration. Discovery order is project-level, then `~/.figma-suite/`, then the legacy location.
+- The contract test covers project-level, host-neutral global, and legacy global discovery and precedence.
+
 ## 2.0.1
 
 Proactive setup and upgrade from 1.x.

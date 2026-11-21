@@ -27,7 +27,7 @@ Structure, ownership and rules: [design-md-template.md](../reference/design-md-t
 
 ## Interview
 
-After the file is written. At most three questions per round, recommended answer first (use `AskUserQuestion`). Ask only what cannot be derived:
+After the file is written. At most three questions per round, recommended answer first. Use the host's question UI when available; otherwise ask a numbered question in plain text. Ask only what cannot be derived:
 
 1. **Product** — who uses it, what job, which mode (`operate` for tools used repeatedly; `consumer` for mobile and lifestyle apps; `persuade` for marketing; `read` for content). Three adjectives for how it should feel.
 2. **Taste decisions** — only those the code does not settle: icons in buttons (none / meaningful only / always), badge policy, card style (flat or bordered), casing, description density. Offer the best-system default as the recommended option.

@@ -47,7 +47,7 @@ if (designArg) {
   ws = ws ? { ...ws, config: { ...(ws.config ?? {}), designMdPath: abs } } : { workspace: dirname(abs), config: { mode: "standalone", designMdPath: abs } };
 }
 if (!ws) {
-  console.error("No figma-suite workspace found (looked for .figma-suite/config.json and ~/.claude/figma-suite/*). Run /figma-suite setup, or lint one file with --design-md PATH.");
+  console.error("No figma-suite workspace found (looked for .figma-suite/config.json, ~/.figma-suite/* and legacy ~/.claude/figma-suite/*). Run /figma-suite setup (or ask your agent to use the figma-suite skill for setup), or lint one file with --design-md PATH.");
   process.exit(2);
 }
 
